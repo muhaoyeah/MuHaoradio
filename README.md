@@ -1,5 +1,7 @@
 # Mineradio
 
+当前开发分支包含酷狗概念版官方网页会话验证入口。该入口是实验性能力，仅验证官方会话，不承诺概念版会员播放已接入。
+
 ![Mineradio 暗场启动页](./docs/assets/readme/cinema-beat-smoke.png)
 
 Mineradio 是一款 Windows 桌面沉浸式音乐播放器，把天气电台、搜索播放、歌词舞台、粒子视觉和 3D 歌单架组合成一个更接近现场感的私人音乐空间。

@@ -59,6 +59,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const COOKIE_FILE = process.env.COOKIE_FILE || path.join(__dirname, '.cookie');
 const QQ_COOKIE_FILE = process.env.QQ_COOKIE_FILE || path.join(__dirname, '.qq-cookie');
+const KUGOU_CONCEPT_COOKIE_FILE = process.env.KUGOU_CONCEPT_COOKIE_FILE || path.join(__dirname, '.kugou-concept-cookie');
 const UPDATE_WORK_DIR = process.env.MINERADIO_UPDATE_DIR || path.join(__dirname, 'updates');
 const UPDATE_DOWNLOAD_DIR = process.env.MINERADIO_UPDATE_DOWNLOAD_DIR || path.join(UPDATE_WORK_DIR, 'downloads');
 const UPDATE_PATCH_BACKUP_DIR = process.env.MINERADIO_PATCH_BACKUP_DIR || path.join(UPDATE_WORK_DIR, 'backups', 'patches');
@@ -184,6 +185,14 @@ catch (e) { qqCookie = ''; }
 function saveQQCookie(c) {
   qqCookie = normalizeCookieHeader(c) || rawCookieFallback(c);
   try { fs.writeFileSync(QQ_COOKIE_FILE, qqCookie); } catch (e) {}
+}
+
+let kugouConceptCookie = '';
+try { if (fs.existsSync(KUGOU_CONCEPT_COOKIE_FILE)) kugouConceptCookie = fs.readFileSync(KUGOU_CONCEPT_COOKIE_FILE, 'utf8').trim(); }
+catch (e) { kugouConceptCookie = ''; }
+function saveKugouConceptCookie(c) {
+  kugouConceptCookie = normalizeCookieHeader(c) || rawCookieFallback(c);
+  try { fs.writeFileSync(KUGOU_CONCEPT_COOKIE_FILE, kugouConceptCookie); } catch (e) {}
 }
 
 // ---------- 工具 ----------
@@ -3473,6 +3482,48 @@ const server = http.createServer(async (req, res) => {
       console.error('[QQLoginStatus]', err);
       sendJSON(res, { provider: 'qq', loggedIn: false, error: err.message }, 500);
     }
+    return;
+  }
+
+  if (pn === '/api/kugou-concept/login/status') {
+    sendJSON(res, {
+      provider: 'kugou-concept',
+      loggedIn: !!kugouConceptCookie,
+      verificationOnly: true,
+      playbackSupported: false,
+      nickname: '酷狗概念版',
+      message: kugouConceptCookie
+        ? '已保存酷狗官方网页会话；概念版会员与播放能力仍需官方授权验证'
+        : '尚未验证酷狗概念版账号',
+    });
+    return;
+  }
+
+  if (pn === '/api/kugou-concept/login/cookie') {
+    if (req.method !== 'POST') { sendJSON(res, { provider: 'kugou-concept', error: 'METHOD_NOT_ALLOWED' }, 405); return; }
+    try {
+      const body = await readRequestBody(req);
+      const cookie = body && (body.cookie || body.cookies || '');
+      const normalized = normalizeCookieHeader(cookie);
+      if (!normalized) { sendJSON(res, { provider: 'kugou-concept', loggedIn: false, error: 'EMPTY_COOKIE' }, 400); return; }
+      saveKugouConceptCookie(normalized);
+      sendJSON(res, {
+        provider: 'kugou-concept',
+        loggedIn: true,
+        verificationOnly: true,
+        playbackSupported: false,
+        nickname: '酷狗概念版',
+        message: '会话已保存，仅用于官方能力验证，不代表概念版会员权益已识别',
+      });
+    } catch (err) {
+      sendJSON(res, { provider: 'kugou-concept', loggedIn: false, error: err.message || 'KUGOU_CONCEPT_COOKIE_FAILED' }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/kugou-concept/logout') {
+    saveKugouConceptCookie('');
+    sendJSON(res, { provider: 'kugou-concept', ok: true, loggedIn: false });
     return;
   }
 

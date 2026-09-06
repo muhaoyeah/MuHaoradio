@@ -36,6 +36,12 @@ const NETEASE_LOGIN_PARTITION = 'persist:mineradio-netease-login';
 const NETEASE_LOGIN_URL = 'https://music.163.com/#/login';
 const QQ_LOGIN_PARTITION = 'persist:mineradio-qqmusic-login';
 const QQ_LOGIN_URL = 'https://y.qq.com/n/ryqq/profile';
+const KUGOU_CONCEPT_LOGIN_PARTITION = 'persist:mineradio-kugou-concept-login';
+// The concept edition does not expose a documented third-party OAuth endpoint.
+// This is an official Kugou web-session probe only; it must not be presented as
+// proof that concept-edition membership or playback is available.
+const KUGOU_CONCEPT_LOGIN_URL = process.env.MINERADIO_KUGOU_CONCEPT_LOGIN_URL || 'https://www.kugou.com/';
+const KUGOU_CONCEPT_ALLOWED_HOSTS = new Set(['kugou.com', 'www.kugou.com', 'login.kugou.com', 'm.kugou.com']);
 
 const CHROMIUM_PERFORMANCE_SWITCHES = [
   ['autoplay-policy', 'no-user-gesture-required'],
@@ -360,6 +366,10 @@ function isNeteaseCookieDomain(domain) {
     normalized === 'music.163.com' || normalized.endsWith('.music.163.com') ||
     normalized === 'netease.com' || normalized.endsWith('.netease.com');
 }
+function isKugouConceptCookieDomain(domain) {
+  const normalized = String(domain || '').toLowerCase().replace(/^\./, '');
+  return KUGOU_CONCEPT_ALLOWED_HOSTS.has(normalized);
+}
 
 function buildCookieHeaderFor(cookies, isAllowedDomain, priority) {
   const picked = new Map();
@@ -614,6 +624,95 @@ async function clearNeteaseMusicLoginSession() {
     storages: ['cookies', 'localstorage', 'indexdb', 'cachestorage'],
   });
   return { ok: true };
+}
+
+function kugouConceptCookieHasSession(cookieText) {
+  const text = String(cookieText || '');
+  return /(?:KUGOU|kg_|userid|token|session|login)/i.test(text);
+}
+
+async function readKugouConceptLoginCookieHeader(cookieSession) {
+  const cookies = await cookieSession.cookies.get({});
+  return buildCookieHeaderFor(cookies, isKugouConceptCookieDomain, []);
+}
+
+async function openKugouConceptLoginWindow(owner) {
+  const cookieSession = session.fromPartition(KUGOU_CONCEPT_LOGIN_PARTITION);
+  const initialCookie = await readKugouConceptLoginCookieHeader(cookieSession);
+  if (kugouConceptCookieHasSession(initialCookie)) {
+    return { ok: true, cookie: initialCookie, reused: true, provider: 'kugou-concept', verificationOnly: true };
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    let pollTimer = null;
+    const loginWindow = new BrowserWindow({
+      width: 980,
+      height: 760,
+      minWidth: 780,
+      minHeight: 580,
+      parent: owner && !owner.isDestroyed() ? owner : undefined,
+      show: false,
+      autoHideMenuBar: true,
+      title: '酷狗概念版账号验证',
+      backgroundColor: '#111111',
+      icon: APP_ICON_ICO,
+      webPreferences: {
+        partition: KUGOU_CONCEPT_LOGIN_PARTITION,
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+    const finish = async (result) => {
+      if (settled) return;
+      settled = true;
+      if (pollTimer) clearInterval(pollTimer);
+      if (loginWindow && !loginWindow.isDestroyed()) loginWindow.close();
+      resolve(result);
+    };
+    const checkCookies = async () => {
+      try {
+        const cookie = await readKugouConceptLoginCookieHeader(cookieSession);
+        if (kugouConceptCookieHasSession(cookie)) {
+          finish({ ok: true, cookie, provider: 'kugou-concept', verificationOnly: true });
+        }
+      } catch (e) {
+        console.warn('[KugouConceptLogin] cookie check failed:', e.message);
+      }
+    };
+    loginWindow.webContents.setWindowOpenHandler(({ url }) => {
+      try {
+        const target = new URL(url);
+        if (target.protocol === 'https:' && isKugouConceptCookieDomain(target.hostname)) {
+          loginWindow.loadURL(target.toString()).catch(() => {});
+        } else if (target.protocol === 'https:') {
+          shell.openExternal(target.toString()).catch(() => {});
+        }
+      } catch (_) {}
+      return { action: 'deny' };
+    });
+    loginWindow.on('ready-to-show', () => loginWindow.show());
+    loginWindow.on('closed', async () => {
+      if (settled) return;
+      if (pollTimer) clearInterval(pollTimer);
+      try {
+        const cookie = await readKugouConceptLoginCookieHeader(cookieSession);
+        resolve(kugouConceptCookieHasSession(cookie)
+          ? { ok: true, cookie, provider: 'kugou-concept', verificationOnly: true }
+          : { ok: false, cancelled: true, provider: 'kugou-concept' });
+      } catch (e) {
+        resolve({ ok: false, error: e.message || 'KUGOU_CONCEPT_LOGIN_CANCELLED', provider: 'kugou-concept' });
+      }
+    });
+    pollTimer = setInterval(checkCookies, 1200);
+    loginWindow.loadURL(KUGOU_CONCEPT_LOGIN_URL).catch((e) => finish({ ok: false, error: e.message, provider: 'kugou-concept' }));
+  });
+}
+
+async function clearKugouConceptLoginSession() {
+  const cookieSession = session.fromPartition(KUGOU_CONCEPT_LOGIN_PARTITION);
+  await cookieSession.clearStorageData({ storages: ['cookies', 'localstorage', 'indexdb', 'cachestorage'] });
+  return { ok: true, provider: 'kugou-concept' };
 }
 
 function getWindowedBounds(win) {
@@ -1174,6 +1273,14 @@ ipcMain.handle('qq-music-open-login', async (event) => {
 
 ipcMain.handle('qq-music-clear-login', async () => {
   return clearQQMusicLoginSession();
+});
+
+ipcMain.handle('kugou-concept-open-login', async (event) => {
+  return openKugouConceptLoginWindow(getSenderWindow(event));
+});
+
+ipcMain.handle('kugou-concept-clear-login', async () => {
+  return clearKugouConceptLoginSession();
 });
 
 ipcMain.handle('mineradio-open-update-installer', async (_event, filePath) => {

@@ -196,6 +196,7 @@ body.empty-home-active.diy-mode #search-area:not(.has-results) #search-mode-tabs
 .tag-source{display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.045);font-size:8.5px;font-weight:800;letter-spacing:.55px;line-height:1;flex-shrink:0}
 .tag-source.netease{color:#ffd8dd;border-color:rgba(217,91,103,.30);background:rgba(217,91,103,.075)}
 .tag-source.qq{color:#f0ffc8;border-color:rgba(191,214,107,.30);background:rgba(191,214,107,.075)}
+.tag-source.kugou-concept{color:#ffe2a3;border-color:rgba(244,190,92,.32);background:rgba(244,190,92,.08)}
 .search-result.qq-source:hover{background:rgba(191,214,107,.052)}
 .search-result.netease-source:hover{background:rgba(217,91,103,.045)}
 .podcast-result-head{display:flex;align-items:center;gap:10px;padding:11px 13px 9px;border-bottom:1px solid rgba(255,255,255,.04);background:rgba(255,255,255,.025)}
@@ -241,7 +242,7 @@ body.splash-active #empty-home,body.immersive-mode #empty-home{opacity:0!importa
 body.empty-home-active #canvas-container{filter:none}
 body.home-wallpaper-preview #canvas-container{filter:none}
 .empty-home-shell{height:100%;min-height:440px;display:grid;grid-template-columns:minmax(370px,.94fr) minmax(520px,1.06fr);grid-template-rows:auto 1fr;gap:14px;align-content:stretch}
-.home-hero{position:relative;grid-row:1 / span 2;min-height:438px;padding:28px;border-radius:28px;border:1px solid color-mix(in srgb,var(--home-accent) 22%,rgba(255,255,255,.085));background:linear-gradient(145deg,rgba(33,29,34,.64),rgba(9,10,14,.76) 48%,rgba(17,20,25,.70));box-shadow:0 28px 90px rgba(0,0,0,.34),0 0 0 1px color-mix(in srgb,var(--home-accent) 7%,transparent),inset 0 1px 0 rgba(255,255,255,.065);backdrop-filter:blur(30px) saturate(1.16);-webkit-backdrop-filter:blur(30px) saturate(1.16);overflow:hidden}
+.home-hero{--home-audio-energy:0;--home-audio-bass:0;--home-audio-beat:0;position:relative;grid-row:1 / span 2;min-height:438px;padding:28px;border-radius:28px;border:1px solid color-mix(in srgb,var(--home-accent) 22%,rgba(255,255,255,.085));background:linear-gradient(145deg,rgba(33,29,34,.64),rgba(9,10,14,.76) 48%,rgba(17,20,25,.70));box-shadow:0 28px 90px rgba(0,0,0,.34),0 0 0 1px color-mix(in srgb,var(--home-accent) 7%,transparent),inset 0 1px 0 rgba(255,255,255,.065);backdrop-filter:blur(30px) saturate(1.16);-webkit-backdrop-filter:blur(30px) saturate(1.16);overflow:hidden}
 .home-hero::before{content:'';position:absolute;inset:0;background:linear-gradient(118deg,rgba(255,255,255,.060),transparent 24%,rgba(255,83,103,.070) 54%,rgba(122,215,194,.055) 82%,transparent 100%),linear-gradient(90deg,rgba(255,255,255,.032) 0 1px,transparent 1px 48px),linear-gradient(0deg,rgba(255,255,255,.024) 0 1px,transparent 1px 44px);opacity:.72;pointer-events:none}
 .home-hero::after{content:'';position:absolute;left:28px;right:28px;bottom:22px;height:1px;background:linear-gradient(90deg,color-mix(in srgb,var(--home-accent) 0%,transparent),color-mix(in srgb,var(--home-accent) 52%,transparent),rgba(36,66,255,.24),rgba(248,244,238,.18),color-mix(in srgb,var(--home-accent) 0%,transparent));opacity:.82;pointer-events:none}
 .home-hero-inner{position:relative;z-index:2;height:100%;display:grid;grid-template-columns:minmax(0,1.16fr) minmax(150px,.64fr);grid-template-rows:auto auto auto auto minmax(150px,1fr);column-gap:18px}
@@ -256,6 +257,29 @@ body.home-wallpaper-preview #canvas-container{filter:none}
 .home-chip{height:32px;padding:0 13px;border-radius:999px;border:1px solid rgba(255,255,255,.11);background:rgba(255,255,255,.060);color:rgba(255,255,255,.76);font-family:inherit;font-size:11.5px;font-weight:680;cursor:pointer;transition:background .18s,border-color .18s,color .18s,transform .18s,box-shadow .18s}
 .home-chip:hover{background:color-mix(in srgb,var(--home-accent) 10%,transparent);border-color:color-mix(in srgb,var(--home-accent) 38%,rgba(255,255,255,.10));color:#fff;box-shadow:0 10px 26px color-mix(in srgb,var(--home-accent) 8%,transparent);transform:translateY(-1px)}
 .home-console-chip{height:36px;border-color:color-mix(in srgb,var(--home-accent) 34%,rgba(255,255,255,.12));background:color-mix(in srgb,var(--home-accent) 12%,rgba(255,255,255,.055));color:#fff}
+.home-hero-carousel{position:absolute;inset:0;z-index:1;overflow:hidden;background:#09090d}
+.home-hero-slide{position:absolute;inset:0;margin:0;opacity:0;transform:scale(1.025);transition:opacity .86s cubic-bezier(.16,1,.3,1),transform 6.8s ease;pointer-events:none}
+.home-hero-slide.is-active{opacity:1;transform:scale(1)}
+.home-hero-slide img{width:100%;height:100%;display:block;object-fit:cover;object-position:center}
+.home-hero-slide::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.10),rgba(0,0,0,.18) 44%,rgba(0,0,0,.58)),linear-gradient(90deg,rgba(0,0,0,.54),transparent 46%,rgba(0,0,0,.16));pointer-events:none}
+.home-audio-reactor{position:absolute;z-index:3;left:34px;right:44px;bottom:66px;height:42px;pointer-events:none;opacity:0;transform:translateY(8px);transition:opacity .42s cubic-bezier(.16,1,.3,1),transform .42s cubic-bezier(.16,1,.3,1),filter .42s cubic-bezier(.16,1,.3,1);filter:blur(.2px)}
+.home-audio-reactor::before{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--home-accent) 54%,rgba(255,255,255,.82)),rgba(255,255,255,.68),transparent);opacity:calc(.18 + var(--home-audio-energy) * .58);transform:scaleX(calc(.28 + var(--home-audio-energy) * .72));transform-origin:left center;box-shadow:0 0 calc(12px + var(--home-audio-bass) * 24px) color-mix(in srgb,var(--home-accent) 38%,transparent)}
+.home-audio-reactor::after{content:'';position:absolute;left:8%;right:12%;bottom:-10px;height:26px;border-radius:999px;background:radial-gradient(ellipse at center,color-mix(in srgb,var(--home-accent) 32%,rgba(255,255,255,.16)),transparent 68%);opacity:calc(.08 + var(--home-audio-energy) * .24);filter:blur(14px);transform:scaleX(calc(.62 + var(--home-audio-bass) * .28))}
+body.playback-active.empty-home-active .home-audio-reactor{opacity:calc(.34 + var(--home-audio-energy) * .40);transform:translateY(calc(4px - var(--home-audio-beat) * 4px));filter:blur(calc(.15px + var(--home-audio-beat) * .30px))}
+.home-hero-carousel-shell{position:relative;z-index:2;height:100%;min-height:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:16px}
+.home-hero-carousel-copy{max-width:360px;text-shadow:0 12px 36px rgba(0,0,0,.42)}
+.home-hero-carousel-kicker{font-size:10px;font-weight:780;letter-spacing:.18em;text-transform:uppercase;color:color-mix(in srgb,var(--home-accent) 70%,rgba(255,255,255,.56));margin-bottom:9px}
+.home-hero-carousel-title{font-size:clamp(28px,3.8vw,50px);line-height:1.02;font-weight:780;letter-spacing:0;color:rgba(255,255,255,.98)}
+.home-hero-carousel-sub{margin-top:10px;font-size:12.5px;line-height:1.58;color:rgba(255,255,255,.70)}
+.home-hero-mood-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:13px}
+.home-hero-mood{height:25px;padding:0 9px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(10,10,14,.34);display:inline-flex;align-items:center;color:rgba(255,255,255,.72);font-size:10.5px;font-weight:720;letter-spacing:.04em;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.home-hero-carousel-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;position:relative;z-index:4}
+.home-hero-nav{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.14);background:rgba(8,9,13,.42);color:rgba(255,255,255,.86);font-family:inherit;font-size:20px;line-height:1;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);transition:transform .18s,background .18s,border-color .18s,color .18s}
+.home-hero-nav:hover{transform:translateY(-1px);background:rgba(255,255,255,.12);border-color:color-mix(in srgb,var(--home-accent) 42%,rgba(255,255,255,.16));color:#fff}
+.home-hero-dots{display:flex;align-items:center;gap:7px;margin-left:auto}
+.home-hero-dot{width:7px;height:7px;border:0;border-radius:999px;background:rgba(255,255,255,.38);padding:0;cursor:pointer;transition:width .22s,background .22s,opacity .22s;opacity:.86}
+.home-hero-dot.is-active{width:24px;background:color-mix(in srgb,var(--home-accent) 68%,#fff);opacity:1}
+.home-hero:hover .home-hero-nav,.home-hero:focus-within .home-hero-nav{opacity:1}
 .home-visual{grid-column:2;grid-row:2 / span 2;position:relative;align-self:center;justify-self:end;width:100%;max-width:300px;height:74px;margin-top:0;pointer-events:none;filter:drop-shadow(0 18px 34px rgba(0,0,0,.28))}
 .home-visual.generated .home-sleeve,.home-visual.generated .home-disc{display:none}
 .home-radio-img{display:none}
@@ -268,8 +292,8 @@ body.home-wallpaper-preview #canvas-container{filter:none}
 .home-eq{display:none}
 .home-eq span{display:block;flex:1;min-width:5px;height:var(--h,28px);border-radius:999px;background:linear-gradient(180deg,rgba(255,255,255,.94),var(--bar,#ff5367));box-shadow:0 0 18px color-mix(in srgb,var(--bar,#ff5367) 52%,transparent);animation:home-eq-rise 1.8s ease-in-out infinite;animation-delay:var(--d,0s)}
 .home-radio-badge{display:none}
-.home-wave-track{position:absolute;left:0;right:0;top:50%;height:44px;display:flex;align-items:center;gap:4px;opacity:.94;mix-blend-mode:screen;transform:translateY(-50%)}
-.home-wave-track span{flex:1;min-width:3px;border-radius:999px;background:linear-gradient(180deg,#fff,var(--home-accent));box-shadow:0 0 12px color-mix(in srgb,var(--home-accent) 55%,transparent);height:5px;transform-origin:bottom;transition:height .08s linear,opacity .08s linear}
+.home-wave-track{position:absolute;left:0;right:0;bottom:5px;height:40px;display:flex;align-items:flex-end;gap:4px;opacity:.94;mix-blend-mode:screen}
+.home-wave-track span{flex:1;min-width:3px;border-radius:999px;background:linear-gradient(180deg,rgba(255,255,255,.92),color-mix(in srgb,var(--home-accent) 86%,#fff));box-shadow:0 0 12px color-mix(in srgb,var(--home-accent) 42%,transparent);height:5px;transform-origin:bottom;transition:height .08s linear,opacity .08s linear,filter .08s linear}
 @keyframes home-disc-turn{to{transform:rotate(360deg)}}
 @keyframes home-eq-rise{0%,100%{transform:scaleY(.68);opacity:.66}45%{transform:scaleY(1);opacity:1}}
 .home-mosaic{grid-column:1 / -1;grid-row:5;align-self:end;display:grid;grid-template-columns:1.18fr .82fr;grid-template-rows:1fr 1fr;gap:10px;height:min(216px,26vh);min-height:150px;margin-top:18px}
@@ -290,19 +314,27 @@ body.home-wallpaper-preview #canvas-container{filter:none}
 .home-card::before{content:'';position:absolute;inset:0;background:linear-gradient(118deg,color-mix(in srgb,var(--tone-a) 22%,transparent),transparent 38%,color-mix(in srgb,var(--tone-b) 16%,transparent) 74%,transparent),linear-gradient(90deg,rgba(255,255,255,.035) 0 1px,transparent 1px 38px);opacity:.86;pointer-events:none}
 .home-card::after{content:'';position:absolute;right:114px;bottom:18px;width:38px;height:70px;border-radius:999px;background:repeating-linear-gradient(0deg,color-mix(in srgb,var(--tone-c) 64%,rgba(255,255,255,.26)) 0 4px,transparent 4px 10px);opacity:.20;transform:skewX(-10deg);pointer-events:none}
 .home-card:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--tone-a) 42%,rgba(255,255,255,.18));background:linear-gradient(142deg,rgba(36,33,39,.72),rgba(10,10,14,.84));box-shadow:0 28px 84px rgba(0,0,0,.36),0 0 34px color-mix(in srgb,var(--tone-a) 16%,transparent),inset 0 1px 0 rgba(255,255,255,.085)}
-body.empty-home-active .home-card{animation:home-card-float 7.4s ease-in-out infinite}
-body.empty-home-active .home-card:hover{animation:none}
-body.empty-home-active .home-card:nth-of-type(2){animation-delay:-1.4s}
-body.empty-home-active .home-card:nth-of-type(3){animation-delay:-2.6s}
-body.empty-home-active .home-card:nth-of-type(4){animation-delay:-3.8s}
+body.empty-home-active .home-hero{animation:home-hero-enter .66s cubic-bezier(.16,1,.3,1) both}
+body.empty-home-active .home-card{animation:home-card-enter .58s cubic-bezier(.16,1,.3,1) both}
+body.empty-home-active .home-card:nth-of-type(2){animation-delay:.045s}
+body.empty-home-active .home-card:nth-of-type(3){animation-delay:.090s}
+body.empty-home-active .home-card:nth-of-type(4){animation-delay:.135s}
+body.empty-home-active .home-card:nth-of-type(5){animation-delay:.180s}
+body.empty-home-active .home-card:nth-of-type(6){animation-delay:.225s}
+body.empty-home-active .home-tile{animation:home-tile-enter .52s cubic-bezier(.16,1,.3,1) both;animation-delay:calc(180ms + var(--home-tile-index,0) * 36ms)}
+body.playback-active.empty-home-active .home-card-art{transform:rotate(3deg) scale(calc(1 + var(--home-audio-bass) * .018));box-shadow:0 18px 50px rgba(0,0,0,.36),0 0 calc(10px + var(--home-audio-bass) * 18px) color-mix(in srgb,var(--home-accent) 12%,transparent),inset 0 1px 0 rgba(255,255,255,.16)}
 body.empty-home-active .home-visual{animation:home-visual-drift 8.8s ease-in-out infinite}
+@keyframes home-hero-enter{0%{opacity:0;transform:translate3d(-10px,16px,0) scale(.985);filter:blur(10px)}100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:blur(0)}}
+@keyframes home-card-enter{0%{opacity:0;transform:translate3d(12px,18px,0) scale(.982);filter:blur(8px)}100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:blur(0)}}
+@keyframes home-tile-enter{0%{opacity:0;transform:translateY(14px) scale(.985);filter:blur(7px)}100%{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}
 @keyframes home-card-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
 @keyframes home-visual-drift{0%,100%{transform:translate3d(0,0,0) rotate(0deg)}50%{transform:translate3d(0,-5px,0) rotate(.6deg)}}
 .home-card > *,.home-chip > *,.home-tile > *{pointer-events:none}
-.home-card-label,.home-card-title,.home-card-sub{position:relative;z-index:2}
+.home-card-label,.home-card-title,.home-card-sub,.home-card-meta{position:relative;z-index:2}
 .home-card-label{font-size:10px;font-weight:760;letter-spacing:.14em;text-transform:uppercase;color:color-mix(in srgb,var(--tone-a) 70%,#fff);margin-bottom:8px;text-shadow:0 0 18px color-mix(in srgb,var(--tone-a) 22%,transparent)}
 .home-card-title{font-size:19px;font-weight:780;line-height:1.16;letter-spacing:0;color:rgba(255,255,255,.96);max-width:70%}
 .home-card-sub{margin-top:8px;font-size:11.5px;line-height:1.45;color:rgba(255,255,255,.55);max-width:70%}
+.home-card-meta{display:inline-flex;align-items:center;height:24px;margin-top:13px;padding:0 9px;border-radius:999px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.052);color:color-mix(in srgb,var(--tone-a) 54%,rgba(255,255,255,.72));font-size:10.5px;font-weight:760;letter-spacing:.035em;max-width:72%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .home-card-art{position:absolute;z-index:1;right:13px;bottom:13px;width:108px;height:108px;border-radius:24px;background:linear-gradient(135deg,color-mix(in srgb,var(--tone-a) 78%,#14141a),color-mix(in srgb,var(--tone-b) 68%,#09090d));background-size:cover;background-position:center;box-shadow:0 18px 50px rgba(0,0,0,.36),inset 0 1px 0 rgba(255,255,255,.16);transform:rotate(3deg);overflow:hidden}
 .home-card-art:not(.has-cover)::before{content:'';position:absolute;inset:18px;border-radius:50%;background:repeating-radial-gradient(circle,rgba(255,255,255,.16) 0 1px,transparent 1px 8px),conic-gradient(from 180deg,var(--tone-a),var(--tone-b),var(--tone-c),var(--tone-a));box-shadow:inset 0 0 0 14px rgba(5,5,8,.44),0 12px 28px rgba(0,0,0,.26)}
 .home-card-art::after{content:'';position:absolute;inset:0;background:linear-gradient(145deg,rgba(255,255,255,.12),transparent 42%,rgba(0,0,0,.28));pointer-events:none}
@@ -330,6 +362,9 @@ body.empty-home-active .home-visual{animation:home-visual-drift 8.8s ease-in-out
 body.empty-home-active.controls-visible #empty-home{bottom:128px}
 @media (max-height:760px){body.empty-home-active.controls-visible #empty-home{bottom:112px}}
 @media (max-width:620px){#empty-home{top:146px;bottom:44px;width:calc(100vw - 24px)}.home-hero{padding:20px;border-radius:22px}.home-hero-inner{display:flex;flex-direction:column}.home-visual{display:none}.home-mosaic{display:none}.home-grid{grid-template-columns:1fr}.home-tile-row{grid-template-columns:repeat(2,minmax(0,1fr))}.home-tile-cover{height:auto;aspect-ratio:1}.home-tile-sub{display:block}.home-card-art{width:88px;height:88px}.home-card-title,.home-card-sub{max-width:68%}}
+@media (max-width:1120px){.home-card-meta{height:22px;margin-top:9px;font-size:9.8px;max-width:62%}.home-hero-mood{height:23px;font-size:10px}}
+@media (max-width:620px){.home-card-meta{max-width:66%}.home-hero-mood-row{margin-top:10px}}
+@media (prefers-reduced-motion:reduce){body.empty-home-active .home-hero,body.empty-home-active .home-card,body.empty-home-active .home-tile,body.empty-home-active .home-visual,.home-hero-slide{animation:none!important;transition:none!important}.home-audio-reactor{display:none!important}}
 .home-visual.generated{height:74px!important;max-width:300px!important;align-self:center!important}
 @media (max-height:760px){.home-visual.generated{height:64px!important;max-width:260px!important}}
 
@@ -453,6 +488,7 @@ body.desktop-shell.empty-home-active.controls-visible #empty-home{bottom:126px}
 .account-source-dot{width:7px;height:7px;border-radius:50%;background:var(--source-local);box-shadow:0 0 12px currentColor;flex-shrink:0}
 .account-source-dot.netease{background:var(--source-netease);color:var(--source-netease)}
 .account-source-dot.qq{background:var(--source-qq);color:var(--source-qq)}
+.account-source-dot.kugou-concept{background:#f4be5c;color:#f4be5c}
 .top-account-pill{height:44px;min-width:0;display:flex;align-items:center;gap:8px;padding:0 14px 0 4px;border-radius:24px;border:1px solid rgba(244,210,138,.52);background:rgba(244,210,138,.07);box-shadow:0 0 0 1px rgba(244,210,138,.08),0 14px 42px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.08);transition:background .22s,border-color .22s,box-shadow .22s,transform .22s}
 #user-btn.multi-account:hover .top-account-pill{background:rgba(244,210,138,.10);border-color:rgba(244,210,138,.62);box-shadow:0 0 0 1px rgba(244,210,138,.10),0 16px 44px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.10)}
 .top-account-pill img{width:34px;height:34px;border-radius:50%;object-fit:cover;background:rgba(255,255,255,.08);flex-shrink:0}
@@ -1931,9 +1967,33 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
 <section id="empty-home" aria-label="Mineradio home">
   <div class="empty-home-shell">
     <div class="home-hero">
-      <div class="home-hero-inner home-construction-inner">
-        <div class="home-title home-construction-title">🚧此处施工，敬请期待🚧</div>
-        <button class="home-chip home-console-chip" type="button" onclick="openHomePlayerConsole()">展开播放器控制台</button>
+      <div class="home-hero-carousel" id="home-hero-carousel" aria-label="首页图片轮播">
+        <figure class="home-hero-slide is-active"><img src="assets/home-hero/hero-01.jpg" alt="" loading="eager" decoding="async"></figure>
+        <figure class="home-hero-slide"><img src="assets/home-hero/hero-02.jpg" alt="" loading="lazy" decoding="async"></figure>
+        <figure class="home-hero-slide"><img src="assets/home-hero/hero-03.jpg" alt="" loading="lazy" decoding="async"></figure>
+        <figure class="home-hero-slide"><img src="assets/home-hero/hero-04.jpg" alt="" loading="lazy" decoding="async"></figure>
+        <figure class="home-hero-slide"><img src="assets/home-hero/hero-05.jpg" alt="" loading="lazy" decoding="async"></figure>
+        <figure class="home-hero-slide"><img src="assets/home-hero/hero-06.jpg" alt="" loading="lazy" decoding="async"></figure>
+      </div>
+      <div class="home-audio-reactor" id="home-audio-reactor" aria-hidden="true">
+        <div class="home-wave-track" id="home-wave-track"></div>
+      </div>
+      <div class="home-hero-carousel-shell">
+        <div class="home-hero-carousel-copy">
+          <div class="home-hero-carousel-kicker" id="home-hero-kicker">MuHao Radio</div>
+          <div class="home-hero-carousel-title" id="home-hero-title">今晚听点什么</div>
+          <div class="home-hero-carousel-sub" id="home-hero-sub">把首页留给你喜欢的照片，打开播放器后也有一点自己的气味。</div>
+          <div class="home-hero-mood-row" aria-label="当前照片心情">
+            <span class="home-hero-mood" id="home-hero-mood-a">夜间电台</span>
+            <span class="home-hero-mood" id="home-hero-mood-b">私人封面</span>
+          </div>
+        </div>
+        <div class="home-hero-carousel-actions" aria-label="首页图片控制">
+          <button class="home-chip home-console-chip" type="button" onclick="openHomePlayerConsole()">展开播放器控制台</button>
+          <button class="home-hero-nav" type="button" data-home-hero-prev aria-label="上一张">‹</button>
+          <button class="home-hero-nav" type="button" data-home-hero-next aria-label="下一张">›</button>
+          <div class="home-hero-dots" id="home-hero-dots" aria-label="图片分页"></div>
+        </div>
       </div>
     </div>
 
@@ -1942,36 +2002,42 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
         <div class="home-card-label">Library</div>
         <div class="home-card-title" id="home-weather-card-title">我的歌单</div>
         <div class="home-card-sub" id="home-weather-card-sub">打开左侧歌单库</div>
+        <div class="home-card-meta" id="home-weather-card-meta">歌单库</div>
         <div class="home-card-art" id="home-weather-art"></div>
       </button>
       <button class="home-card" data-home-tone="mix" type="button" onclick="playHomeSong(0)">
         <div class="home-card-label">Daily</div>
         <div class="home-card-title" id="home-daily-title">每日推荐</div>
         <div class="home-card-sub" id="home-daily-sub">登录后同步你的今日歌曲</div>
+        <div class="home-card-meta" id="home-daily-meta">今日 30 首</div>
         <div class="home-card-art" id="home-daily-art"></div>
       </button>
       <button class="home-card" data-home-tone="playlist" type="button" onclick="playHomeSong(1)">
-        <div class="home-card-label">Song</div>
+        <div class="home-card-label">Radio</div>
         <div class="home-card-title" id="home-private-title">私人电台</div>
         <div class="home-card-sub" id="home-private-sub">从你的推荐和歌单里开播</div>
+        <div class="home-card-meta" id="home-private-meta">根据偏好</div>
         <div class="home-card-art" id="home-private-art"></div>
       </button>
       <button class="home-card" data-home-tone="mix" type="button" onclick="playHomeRecent()">
         <div class="home-card-label">Continue</div>
         <div class="home-card-title" id="home-continue-title">继续听</div>
         <div class="home-card-sub" id="home-continue-sub">最近播放会出现在这里</div>
+        <div class="home-card-meta" id="home-continue-meta">上次播放</div>
         <div class="home-card-art" id="home-continue-art"></div>
       </button>
       <button class="home-card" data-home-tone="local" type="button" onclick="openHomeInsight()">
-        <div class="home-card-label">Profile</div>
+        <div class="home-card-label">Taste</div>
         <div class="home-card-title" id="home-profile-title">听歌画像</div>
         <div class="home-card-sub" id="home-profile-sub">播放几首后生成偏好</div>
+        <div class="home-card-meta" id="home-profile-meta">偏好标签</div>
         <div class="home-card-art" id="home-profile-art"></div>
       </button>
       <button class="home-card" data-home-tone="local" type="button" onclick="playHomeSong(2)">
-        <div class="home-card-label">Song</div>
-        <div class="home-card-title" id="home-library-title">常听歌手</div>
-        <div class="home-card-sub" id="home-library-sub">你的偏好会在这里汇总</div>
+        <div class="home-card-label">Wander</div>
+        <div class="home-card-title" id="home-library-title">随机漫游</div>
+        <div class="home-card-sub" id="home-library-sub">从推荐里挑一首继续走</div>
+        <div class="home-card-meta" id="home-library-meta">轻点开播</div>
         <div class="home-card-art" id="home-library-art"></div>
       </button>
     </div>
@@ -2465,7 +2531,8 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
 <!-- 登录模态 -->
 <div id="login-modal" class="modal-mask">
   <div class="modal dual-login-modal">
-    <div class="login-platform-tabs" id="login-platform-tabs">
+   <div class="login-platform-tabs" id="login-platform-tabs">
+       <button id="login-provider-kugou-concept" class="kugou-concept" type="button" onclick="setLoginProvider('kugou-concept')">酷狗概念版</button>
       <button id="login-provider-netease" class="netease active" type="button" onclick="setLoginProvider('netease')">网易云</button>
       <button id="login-provider-qq" class="qq" type="button" onclick="setLoginProvider('qq')">QQ 音乐</button>
     </div>
@@ -2506,12 +2573,14 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
     <img id="user-modal-avatar" src="" style="width:72px;height:72px;border-radius:50%;margin:0 auto 12px;object-fit:cover;background:rgba(255,255,255,0.1);display:block">
     <div id="user-modal-name" style="font-size:15px;margin-bottom:4px"></div>
     <div id="user-modal-vip" style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:20px;letter-spacing:.5px"></div>
-    <div class="user-platform-tabs" id="user-platform-tabs">
+     <div class="user-platform-tabs" id="user-platform-tabs">
+       <button id="user-provider-kugou-concept" class="kugou-concept" type="button" onclick="setActiveAccountProvider('kugou-concept')">酷狗概念版</button>
       <button id="user-provider-netease" class="netease active" type="button" onclick="setActiveAccountProvider('netease')">网易云</button>
       <button id="user-provider-qq" class="qq" type="button" onclick="setActiveAccountProvider('qq')">QQ 音乐</button>
       <button id="user-provider-both" class="both" type="button" onclick="enableDualAccountView()">我两个都要</button>
     </div>
-    <div class="account-modal-actions">
+     <div class="account-modal-actions">
+      <button id="account-add-kugou-concept" class="modal-btn" onclick="openProviderLogin('kugou-concept')">验证酷狗概念版</button>
       <button id="account-add-netease" class="modal-btn" onclick="openProviderLogin('netease')">补登网易云</button>
       <button id="account-add-qq" class="modal-btn" onclick="openProviderLogin('qq')">补登 QQ 音乐</button>
     </div>
@@ -2696,12 +2765,14 @@ var loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false,
 var qqLoginStatus = { provider: 'qq', loggedIn: false, preview: false, nickname: 'QQ 音乐', userId: '', avatar: '', vipType: 0 };
 var qqLoginAutoRefreshTimer = null;
 var qqLoginWasLoggedIn = false;
+var kugouConceptLoginStatus = { provider: 'kugou-concept', loggedIn: false, verificationOnly: true, playbackSupported: false, nickname: 'Kugou Concept', userId: '', avatar: '', vipType: 0 };
 var loginProvider = 'netease';
 var activeAccountProvider = 'netease';
 var dualAccountMode = false;
 var qqCookieBusy = false;
 var neteaseWebLoginBusy = false;
 var qqWebLoginBusy = false;
+var kugouConceptWebLoginBusy = false;
 var qqManualCookieOpen = false;
 var loginStatusChecked = false, loginStatusCheckFailed = false;
 var qrPollTimer = null, qrKey = null;
@@ -15460,10 +15531,10 @@ function homeListenSummary() {
 function fallbackHomeTiles() {
   return [
     { kind: 'login', title: '登录同步歌单', sub: '网易云 / QQ 音乐' },
-    { kind: 'search', title: '搜索一首歌', sub: '原唱优先', query: '' },
-    { kind: 'local', title: '导入本地音乐', sub: '本地文件也能可视化' },
-    { kind: 'podcastSearch', title: '搜索播客', sub: '长内容 / 电台' },
-    { kind: 'guide', title: '看看视觉舞台', sub: '粒子 / 歌词 / 封面' },
+    { kind: 'search', title: '搜一首歌', sub: '原唱优先', query: '' },
+    { kind: 'local', title: '本地音乐', sub: '拖进来就能播' },
+    { kind: 'podcastSearch', title: '搜播客', sub: '长内容 / 电台' },
+    { kind: 'guide', title: '视觉舞台', sub: '粒子 / 歌词 / 封面' },
   ];
 }
 function homeTileCover(item) {
@@ -15536,16 +15607,16 @@ function renderHomeTiles() {
   }
   if (!tiles.length) tiles = fallbackHomeTiles();
   tiles = tiles.slice(0, 5);
-  if (title) title.textContent = summary.recent ? '接着听' : (loggedOutHome ? '先从这里开始' : '你的歌单与推荐');
+  if (title) title.textContent = summary.recent ? '接着听' : (loggedOutHome ? '今晚入口' : '私人推荐');
   if (note) {
     var liveNote = homeDiscoverState.updatedAt ? '刚刚更新 · 点击即可播放' : '点击即可播放';
-    note.textContent = homeDiscoverState.loading ? '正在整理推荐' : (loggedOutHome && !weatherSongs.length ? '不会自动拉取外部推荐' : (homeDiscoverState.error ? '离线精选' : liveNote));
+    note.textContent = homeDiscoverState.loading ? '正在整理推荐' : (loggedOutHome && !weatherSongs.length ? '不用登录也能开始听' : (homeDiscoverState.error ? '离线精选' : liveNote));
   }
   row.innerHTML = tiles.map(function(item, i){
     var cover = homeTileCover(item);
     var tone = homeToneForItem(item, i);
     var coverClass = 'home-tile-cover' + (cover ? ' has-cover' : '');
-    return '<button class="home-tile' + (!cover && homeDiscoverState.loading ? ' home-skeleton' : '') + '" data-home-tone="' + escHtml(tone) + '" type="button" onclick="handleHomeTileClick(' + i + ')">' +
+    return '<button class="home-tile' + (!cover && homeDiscoverState.loading ? ' home-skeleton' : '') + '" data-home-tone="' + escHtml(tone) + '" style="--home-tile-index:' + i + '" type="button" onclick="handleHomeTileClick(' + i + ')">' +
       '<div class="' + coverClass + '" style="' + (cover ? 'background-image:url(&quot;' + escHtml(cssImageUrl(cover)) + '&quot;)' : '') + '"></div>' +
       '<div class="home-tile-title">' + escHtml(item.title || '') + '</div>' +
       '<div class="home-tile-sub">' + escHtml(item.sub || '') + '</div>' +
@@ -15600,21 +15671,33 @@ function renderHomeDiscover() {
   var profileSub = document.getElementById('home-profile-sub');
   var libTitle = document.getElementById('home-library-title');
   var libSub = document.getElementById('home-library-sub');
+  var weatherCardMeta = document.getElementById('home-weather-card-meta');
+  var dailyMeta = document.getElementById('home-daily-meta');
+  var privateMeta = document.getElementById('home-private-meta');
+  var continueMeta = document.getElementById('home-continue-meta');
+  var profileMeta = document.getElementById('home-profile-meta');
+  var libMeta = document.getElementById('home-library-meta');
   if (weatherCardTitle) weatherCardTitle.textContent = '我的歌单';
   if (weatherCardSub) {
     weatherCardSub.textContent = playlistItem ? (((playlistItem.trackCount || 0) ? playlistItem.trackCount + ' 首 · ' : '') + (playlistItem.creator || '打开左侧歌单库')) : '打开左侧歌单库';
   }
+  if (weatherCardMeta) weatherCardMeta.textContent = playlistItem ? ((playlistItem.trackCount || userPlaylists.length || 1) + ' 首可听') : (userPlaylists.length ? userPlaylists.length + ' 个歌单' : '歌单库');
   if (continueTitle) continueTitle.textContent = summary.recent ? summary.recent.name : '继续听';
   if (continueSub) continueSub.textContent = summary.recent ? (summary.recent.artist || summary.recent.source || '最近播放') : '最近播放会出现在这里';
+  if (continueMeta) continueMeta.textContent = summary.recent ? '接着上次' : '暂无记录';
   if (profileTitle) profileTitle.textContent = summary.topArtist ? summary.topArtist.name : (summary.topSong ? summary.topSong.name : '听歌画像');
   if (profileSub) profileSub.textContent = summary.topArtist ? ('常听歌手 · ' + summary.topArtist.plays + ' 次') : (summary.totalPlays ? summary.totalPlays + ' 次有效播放' : '播放几首后生成偏好');
+  if (profileMeta) profileMeta.textContent = summary.totalPlays ? summary.totalPlays + ' 次播放' : '偏好生成中';
   if (loggedOutHome) {
     if (dailyTitle) dailyTitle.textContent = '每日推荐';
     if (dailySub) dailySub.textContent = '登录后同步你的今日歌曲';
     if (privateTitle) privateTitle.textContent = '推荐歌曲';
     if (privateSub) privateSub.textContent = '登录后同步更多歌曲';
-    if (libTitle) libTitle.textContent = '更多歌曲';
-    if (libSub) libSub.textContent = '播放后会继续补全推荐';
+    if (libTitle) libTitle.textContent = '随机漫游';
+    if (libSub) libSub.textContent = '先搜一首歌，也可以导入本地音乐';
+    if (dailyMeta) dailyMeta.textContent = '今日 30 首';
+    if (privateMeta) privateMeta.textContent = '登录后开启';
+    if (libMeta) libMeta.textContent = '轻点开播';
     setHomeArt('home-weather-art', '', 280);
     setHomeArt('home-daily-art', '', 280);
     setHomeArt('home-private-art', '', 280);
@@ -15628,6 +15711,9 @@ function renderHomeDiscover() {
     if (privateSub) privateSub.textContent = cardSongB ? (cardSongB.artist || songSourceLabel(cardSongB) || '推荐歌曲') : (homeDiscoverState.songs.length + ' 首 · 根据今日推荐与常听偏好');
     if (libTitle) libTitle.textContent = cardSongC ? cardSongC.name : (summary.topArtist ? summary.topArtist.name : '更多歌曲');
     if (libSub) libSub.textContent = cardSongC ? (cardSongC.artist || songSourceLabel(cardSongC) || '推荐歌曲') : (summary.topArtist ? ('歌手偏好 · ' + summary.topArtist.plays + ' 次') : '播放几首后生成你的偏好');
+    if (dailyMeta) dailyMeta.textContent = homeDiscoverState.songs.length ? homeDiscoverState.songs.length + ' 首已同步' : '今日队列';
+    if (privateMeta) privateMeta.textContent = cardSongB ? '私人雷达' : '根据偏好';
+    if (libMeta) libMeta.textContent = cardSongC ? '下一首备选' : (summary.topArtist ? '常听歌手' : '继续补全');
     setHomeArt('home-weather-art', (userPlaylists[0] && userPlaylists[0].cover) || (playlistItem && playlistItem.cover) || daily && daily.cover, 280);
     setHomeArt('home-daily-art', daily && daily.cover, 280);
     setHomeArt('home-private-art', cardSongB && cardSongB.cover || daily && daily.cover || summary.recent && summary.recent.cover || playlistItem && playlistItem.cover, 280);
@@ -15901,6 +15987,95 @@ function openHomePlayerConsole() {
   updateControlsChromeState();
   if (controlsAutoHide) scheduleControlsHide(1800);
   showToast('播放器控制台已展开');
+}
+var homeHeroCarouselState = {
+  index: 0,
+  timer: null,
+  paused: false,
+  intervalMs: 8000,
+};
+var homeHeroCarouselCopy = [
+  { kicker: 'MuHao Radio', title: '今晚听点什么', sub: '把首页留给你喜欢的照片，打开播放器后也有一点自己的气味。', moodA: '夜间电台', moodB: '私人封面' },
+  { kicker: 'Soft Signal', title: '雨天适合慢歌', sub: '不急着切歌，让一首歌把房间的声音慢慢铺满。', moodA: '慢歌', moodB: '低音量' },
+  { kicker: 'After Hours', title: '一个人的电台', sub: '搜索、歌单和视觉舞台都收在这里，打开就能接着听。', moodA: '独处', moodB: '继续播放' },
+  { kicker: 'Daily Drift', title: '随机一点也不错', sub: '从推荐里顺手挑一首，不用想太多，先让音乐开始。', moodA: '随机漫游', moodB: '轻点开播' },
+  { kicker: 'Listen Log', title: '别太吵，刚刚好', sub: '首页不抢音乐的风头，只把常用入口放在最顺手的位置。', moodA: '安静', moodB: '常用入口' },
+  { kicker: 'Visual Radio', title: '继续播放昨天', sub: '照片、歌单、最近播放和视觉效果，慢慢长成你的私人电台。', moodA: '昨天的歌', moodB: '视觉舞台' },
+];
+function setHomeHeroSlide(nextIndex) {
+  var slides = Array.from(document.querySelectorAll('.home-hero-slide'));
+  var dots = Array.from(document.querySelectorAll('.home-hero-dot'));
+  if (!slides.length) return;
+  var count = slides.length;
+  var normalized = ((nextIndex % count) + count) % count;
+  var copy = homeHeroCarouselCopy[normalized] || homeHeroCarouselCopy[0] || {};
+  homeHeroCarouselState.index = normalized;
+  slides.forEach(function(slide, index) {
+    slide.classList.toggle('is-active', index === normalized);
+  });
+  dots.forEach(function(dot, index) {
+    dot.classList.toggle('is-active', index === normalized);
+    dot.setAttribute('aria-pressed', index === normalized ? 'true' : 'false');
+  });
+  var kicker = document.getElementById('home-hero-kicker');
+  var title = document.getElementById('home-hero-title');
+  var sub = document.getElementById('home-hero-sub');
+  var moodA = document.getElementById('home-hero-mood-a');
+  var moodB = document.getElementById('home-hero-mood-b');
+  if (kicker) kicker.textContent = copy.kicker || 'MuHao Radio';
+  if (title) title.textContent = copy.title || '今晚听点什么';
+  if (sub) sub.textContent = copy.sub || '';
+  if (moodA) moodA.textContent = copy.moodA || '私人电台';
+  if (moodB) moodB.textContent = copy.moodB || '轻点开播';
+}
+function stepHomeHeroSlide(delta) {
+  setHomeHeroSlide(homeHeroCarouselState.index + delta);
+  restartHomeHeroCarousel();
+}
+function restartHomeHeroCarousel() {
+  if (homeHeroCarouselState.timer) {
+    clearInterval(homeHeroCarouselState.timer);
+    homeHeroCarouselState.timer = null;
+  }
+  homeHeroCarouselState.timer = setInterval(function() {
+    if (homeHeroCarouselState.paused) return;
+    if (!document.body.classList.contains('empty-home-active')) return;
+    setHomeHeroSlide(homeHeroCarouselState.index + 1);
+  }, homeHeroCarouselState.intervalMs);
+}
+function initHomeHeroCarousel() {
+  var carousel = document.getElementById('home-hero-carousel');
+  var dotsWrap = document.getElementById('home-hero-dots');
+  var slides = Array.from(document.querySelectorAll('.home-hero-slide'));
+  if (!carousel || !dotsWrap || !slides.length || carousel.dataset.ready === '1') return;
+  carousel.dataset.ready = '1';
+  dotsWrap.innerHTML = slides.map(function(_, index) {
+    return '<button class="home-hero-dot' + (index === 0 ? ' is-active' : '') + '" type="button" data-home-hero-dot="' + index + '" aria-label="切换到第 ' + (index + 1) + ' 张" aria-pressed="' + (index === 0 ? 'true' : 'false') + '"></button>';
+  }).join('');
+  var hero = carousel.closest('.home-hero');
+  if (hero) {
+    hero.addEventListener('mouseenter', function() { homeHeroCarouselState.paused = true; });
+    hero.addEventListener('mouseleave', function() { homeHeroCarouselState.paused = false; });
+    hero.addEventListener('focusin', function() { homeHeroCarouselState.paused = true; });
+    hero.addEventListener('focusout', function() { homeHeroCarouselState.paused = false; });
+  }
+  var prev = document.querySelector('[data-home-hero-prev]');
+  var next = document.querySelector('[data-home-hero-next]');
+  if (prev) prev.addEventListener('click', function() { stepHomeHeroSlide(-1); });
+  if (next) next.addEventListener('click', function() { stepHomeHeroSlide(1); });
+  dotsWrap.addEventListener('click', function(event) {
+    var dot = event.target.closest('[data-home-hero-dot]');
+    if (!dot) return;
+    setHomeHeroSlide(Number(dot.dataset.homeHeroDot || 0));
+    restartHomeHeroCarousel();
+  });
+  setHomeHeroSlide(0);
+  restartHomeHeroCarousel();
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initHomeHeroCarousel);
+} else {
+  initHomeHeroCarousel();
 }
 function ensureHomeWallpaperParticles(opts) {
   opts = opts || {};
@@ -18698,9 +18873,13 @@ async function togglePlay() {
   }
 }
 function setPlayIcon(p) {
-  document.getElementById('play-icon').innerHTML = p
-    ? '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
-    : '<path d="M8 5v14l11-7z"/>';
+  var icon = document.getElementById('play-icon');
+  if (icon) {
+    icon.innerHTML = p
+      ? '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+      : '<path d="M8 5v14l11-7z"/>';
+  }
+  document.body.classList.toggle('playback-active', !!p);
 }
 function nextTrack() {
   if (!playQueue.length) return;
@@ -21310,11 +21489,11 @@ function syncFxUniforms() {
   if (uniforms.uTintStrength) uniforms.uTintStrength.value = fx.visualTintMode === 'custom' ? 0.42 : 0;
   syncSkullParticleColors();
 }
-var homeWaveTrackState = { bars: 0, smooth: [] };
+var homeWaveTrackState = { bars: 0, smooth: [], energy: 0, bass: 0, beat: 0 };
 function ensureHomeWaveTrackBars() {
   var el = document.getElementById('home-wave-track');
   if (!el) return;
-  var count = 24;
+  var count = 28;
   if (homeWaveTrackState.bars === count && el.children.length === count) return;
   homeWaveTrackState.bars = count;
   homeWaveTrackState.smooth = new Array(count).fill(0);
@@ -21323,6 +21502,7 @@ function ensureHomeWaveTrackBars() {
 function updateHomeAudioVisual(dt) {
   if (!emptyHomeActive) return;
   var wave = document.getElementById('home-wave-track');
+  var hero = document.querySelector('.home-hero');
   if (!wave) return;
   var nowMs = performance.now();
   if (homeWaveTrackState.lastAt && nowMs - homeWaveTrackState.lastAt < 80) return;
@@ -21330,20 +21510,34 @@ function updateHomeAudioVisual(dt) {
   ensureHomeWaveTrackBars();
   var bars = wave.children;
   var nowT = uniforms && uniforms.uTime ? uniforms.uTime.value : performance.now() / 1000;
+  var isLive = !!(playing && audio && !audio.paused && analyser);
+  var targetEnergy = isLive ? clampRange(smoothEnergy * 0.76 + beatPulse * 0.18, 0, 1) : 0;
+  var targetBass = isLive ? clampRange(smoothBass * 0.92 + beatPulse * 0.16, 0, 1) : 0;
+  var targetBeat = isLive ? clampRange(beatPulse * 1.15, 0, 1) : 0;
+  homeWaveTrackState.energy += (targetEnergy - homeWaveTrackState.energy) * (targetEnergy > homeWaveTrackState.energy ? 0.32 : 0.10);
+  homeWaveTrackState.bass += (targetBass - homeWaveTrackState.bass) * (targetBass > homeWaveTrackState.bass ? 0.34 : 0.11);
+  homeWaveTrackState.beat += (targetBeat - homeWaveTrackState.beat) * (targetBeat > homeWaveTrackState.beat ? 0.42 : 0.16);
+  if (hero) {
+    hero.style.setProperty('--home-audio-energy', homeWaveTrackState.energy.toFixed(3));
+    hero.style.setProperty('--home-audio-bass', homeWaveTrackState.bass.toFixed(3));
+    hero.style.setProperty('--home-audio-beat', homeWaveTrackState.beat.toFixed(3));
+  }
   for (var i = 0; i < bars.length; i++) {
     var ratio = bars.length > 1 ? i / (bars.length - 1) : 0;
     var bin = 0;
-    if (frequencyData && frequencyData.length) {
+    if (isLive && frequencyData && frequencyData.length) {
       bin = (frequencyData[Math.min(frequencyData.length - 1, Math.floor(Math.pow(ratio, 1.2) * (frequencyData.length - 1)))] || 0) / 255;
     } else {
-      bin = 0.16 + Math.sin(nowT * 1.4 + i * 0.34) * 0.06;
+      bin = 0;
     }
-    var target = clampRange(Math.max(bin, smoothBass * 0.35 + smoothMid * 0.18 + beatPulse * 0.24), 0.03, 1);
+    var idleLift = isLive ? 0.03 : 0;
+    var target = clampRange(Math.max(bin, smoothBass * 0.35 + smoothMid * 0.18 + beatPulse * 0.24, idleLift), 0, 1);
     var prev = homeWaveTrackState.smooth[i] || 0;
-    prev += (target - prev) * (target > prev ? 0.34 : 0.12);
+    prev += (target - prev) * (target > prev ? 0.34 : 0.10);
     homeWaveTrackState.smooth[i] = prev;
-    bars[i].style.height = Math.max(4, prev * 18) + 'px';
-    bars[i].style.opacity = String(clampRange(0.36 + prev * 0.68, 0.32, 1));
+    bars[i].style.height = Math.max(2, prev * 24) + 'px';
+    bars[i].style.opacity = String(clampRange((isLive ? 0.24 : 0.05) + prev * 0.70, 0.04, 1));
+    bars[i].style.filter = 'blur(' + (homeWaveTrackState.beat * 0.45).toFixed(2) + 'px)';
   }
 }
 function setRange(id, value) {
@@ -23232,10 +23426,12 @@ function onUserBtnClick() {
   else showLoginModal();
 }
 function platformMeta(provider) {
+  if (provider === 'kugou-concept') return { key: 'kugou-concept', short: 'KG', label: '酷狗概念版', app: '酷狗概念版', dot: 'kugou-concept' };
   if (provider === 'qq') return { key: 'qq', short: 'QQ', label: 'QQ 音乐', app: 'QQ 音乐 App', dot: 'qq' };
   return { key: 'netease', short: 'NE', label: '网易云音乐', app: '网易云音乐 App', dot: 'netease' };
 }
 function platformStatus(provider) {
+  if (provider === 'kugou-concept') return kugouConceptLoginStatus;
   return provider === 'qq' ? qqLoginStatus : loginStatus;
 }
 function providerVipType(provider, status) {
@@ -23273,20 +23469,21 @@ function hasPlatformLogin(provider) {
   return !!(st && st.loggedIn);
 }
 function hasAnyPlatformLogin() {
-  return hasPlatformLogin('netease') || hasPlatformLogin('qq');
+  return hasPlatformLogin('netease') || hasPlatformLogin('qq') || hasPlatformLogin('kugou-concept');
 }
 function firstLoggedProvider() {
   if (hasPlatformLogin(activeAccountProvider)) return activeAccountProvider;
   if (hasPlatformLogin('netease')) return 'netease';
   if (hasPlatformLogin('qq')) return 'qq';
+  if (hasPlatformLogin('kugou-concept')) return 'kugou-concept';
   return 'netease';
 }
 function providerAvatarSrc(provider, status) {
   status = status || platformStatus(provider) || {};
   if (status.avatar) return avatarSrc(status.avatar);
   var meta = platformMeta(provider);
-  var fill = provider === 'qq' ? '#bfd66b' : '#d95b67';
-  var bg = provider === 'qq' ? '#11150b' : '#180b0f';
+  var fill = provider === 'qq' ? '#bfd66b' : (provider === 'kugou-concept' ? '#f4be5c' : '#d95b67');
+  var bg = provider === 'qq' ? '#11150b' : (provider === 'kugou-concept' ? '#171107' : '#180b0f');
   var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><rect width="96" height="96" rx="48" fill="' + bg + '"/><circle cx="48" cy="48" r="34" fill="' + fill + '" opacity=".16"/><text x="48" y="56" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="700" fill="' + fill + '">' + meta.short + '</text></svg>';
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 }
@@ -23383,6 +23580,17 @@ async function refreshQQLoginStatus() {
     return qqLoginStatus;
   }
 }
+async function refreshKugouConceptLoginStatus() {
+  try {
+    var info = await apiJson('/api/kugou-concept/login/status?t=' + Date.now());
+    kugouConceptLoginStatus = Object.assign({ provider:'kugou-concept', loggedIn:false, verificationOnly:true, playbackSupported:false, nickname:'酷狗概念版' }, info || {});
+  } catch (e) {
+    kugouConceptLoginStatus = { provider:'kugou-concept', loggedIn:false, verificationOnly:true, playbackSupported:false, nickname:'酷狗概念版' };
+  }
+  if (!hasPlatformLogin(activeAccountProvider)) activeAccountProvider = firstLoggedProvider();
+  renderUserBtn();
+  return kugouConceptLoginStatus;
+}
 function startQQLoginStatusAutoRefresh() {
   if (qqLoginAutoRefreshTimer) clearInterval(qqLoginAutoRefreshTimer);
   qqLoginAutoRefreshTimer = setInterval(function(){
@@ -23419,7 +23627,7 @@ function renderUserBtn() {
 }
 async function showLoginModal(opts) {
   opts = opts || {};
-  if (opts.provider) loginProvider = opts.provider === 'qq' ? 'qq' : 'netease';
+  if (opts.provider) loginProvider = opts.provider === 'qq' || opts.provider === 'kugou-concept' ? opts.provider : 'netease';
   var modal = document.getElementById('login-modal');
   openGsapModal(modal);
   updateLoginProviderUi();
@@ -23430,13 +23638,14 @@ function closeLoginModal() {
   closeGsapModal(document.getElementById('login-modal'));
 }
 function setLoginProvider(provider, silent) {
-  loginProvider = provider === 'qq' ? 'qq' : 'netease';
+  loginProvider = provider === 'qq' || provider === 'kugou-concept' ? provider : 'netease';
   updateLoginProviderUi();
   if (!silent && document.getElementById('login-modal').classList.contains('show')) refreshQr();
 }
 function updateLoginProviderUi() {
   var meta = platformMeta(loginProvider);
   var isQQ = loginProvider === 'qq';
+  var isKugouConcept = loginProvider === 'kugou-concept';
   var title = document.getElementById('login-modal-title');
   var desc = document.getElementById('login-modal-desc');
   var shell = document.getElementById('qr-shell');
@@ -23447,9 +23656,28 @@ function updateLoginProviderUi() {
   var qqCard = document.getElementById('qq-web-login-card');
   var neteaseBtn = document.getElementById('login-provider-netease');
   var qqBtn = document.getElementById('login-provider-qq');
+  var kugouBtn = document.getElementById('login-provider-kugou-concept');
   var canOpenNeteaseWeb = !!(window.desktopWindow && typeof window.desktopWindow.openNeteaseMusicLogin === 'function');
   if (neteaseBtn) neteaseBtn.classList.toggle('active', loginProvider === 'netease');
   if (qqBtn) qqBtn.classList.toggle('active', isQQ);
+  if (kugouBtn) kugouBtn.classList.toggle('active', isKugouConcept);
+  if (isKugouConcept) {
+    if (title) title.textContent = '验证酷狗概念版';
+    if (desc) desc.textContent = '打开酷狗官方网页验证账号；概念版会员权益和播放能力需要单独验证。';
+    if (shell) { shell.classList.add('web-login-preview', 'qq-preview'); shell.classList.remove('netease-preview'); }
+    if (qqPanel) qqPanel.classList.remove('show');
+    if (qqCookieToggle) qqCookieToggle.classList.remove('show');
+    if (qqCard) {
+      qqCard.disabled = !!kugouConceptWebLoginBusy;
+      var kugouMark = qqCard.querySelector('b');
+      var kugouLabel = qqCard.querySelector('span');
+      if (kugouMark) kugouMark.textContent = 'KG';
+      if (kugouLabel) kugouLabel.textContent = kugouConceptWebLoginBusy ? '等待验证完成' : '打开酷狗官方网页';
+    }
+    if (st) { st.className = 'preview'; st.textContent = kugouConceptLoginStatus.loggedIn ? '已保存酷狗官方网页会话 · 待验证概念版会员能力' : '点击打开酷狗官方网页进行验证'; }
+    if (refreshBtn) { refreshBtn.disabled = !!kugouConceptWebLoginBusy; refreshBtn.textContent = kugouConceptWebLoginBusy ? '等待验证…' : '打开官方网页'; refreshBtn.onclick = openKugouConceptLogin; }
+    return;
+  }
   if (title) title.textContent = '扫码登录' + meta.label;
   if (desc) desc.innerHTML = isQQ
     ? '打开 <b>QQ 音乐官方网页登录窗口</b> 扫码，成功后会自动同步账号会话。'
@@ -23534,8 +23762,37 @@ function toggleQQCookiePanel() {
   updateLoginProviderUi();
 }
 function openProviderWebLogin() {
+  if (loginProvider === 'kugou-concept') return openKugouConceptLogin();
   if (loginProvider === 'qq') return openQQWebLogin();
   return openNeteaseWebLogin();
+}
+async function openKugouConceptLogin() {
+  if (kugouConceptWebLoginBusy) return;
+  var statusEl = document.getElementById('qr-status');
+  var api = window.desktopWindow;
+  if (!api || !api.isDesktop || typeof api.openKugouConceptLogin !== 'function') {
+    if (statusEl) { statusEl.textContent = '当前环境不支持酷狗概念版官方验证'; statusEl.className = 'fail'; }
+    return;
+  }
+  kugouConceptWebLoginBusy = true;
+  updateLoginProviderUi();
+  if (statusEl) { statusEl.textContent = '已打开酷狗官方网页，请完成登录后返回…'; statusEl.className = 'preview'; }
+  try {
+    var result = await api.openKugouConceptLogin();
+    if (!result || !result.ok || !result.cookie) throw new Error((result && (result.message || result.error)) || '酷狗概念版验证未完成');
+    var info = await apiJson('/api/kugou-concept/login/cookie', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({cookie:result.cookie}) });
+    if (!info || !info.loggedIn) throw new Error((info && (info.message || info.error)) || '酷狗官方会话不可用');
+    kugouConceptLoginStatus = info;
+    activeAccountProvider = 'kugou-concept';
+    renderUserBtn();
+    if (statusEl) { statusEl.textContent = '酷狗官方会话已保存；概念版会员能力待验证'; statusEl.className = 'scan'; }
+    setTimeout(function(){ closeLoginModal(); showToast('酷狗概念版账号已验证，播放能力待确认'); }, 520);
+  } catch (e) {
+    if (statusEl) { statusEl.textContent = e && e.message ? e.message : '酷狗概念版验证失败'; statusEl.className = 'fail'; }
+  } finally {
+    kugouConceptWebLoginBusy = false;
+    updateLoginProviderUi();
+  }
 }
 async function openNeteaseWebLogin() {
   if (neteaseWebLoginBusy) return;
@@ -23717,7 +23974,10 @@ function updateUserModalUi() {
   if (avatar) avatar.src = providerAvatarSrc(activeAccountProvider, st);
   if (name) name.textContent = (st && st.nickname) || meta.label;
   if (vipEl) {
-    if (activeAccountProvider === 'netease') {
+    if (activeAccountProvider === 'kugou-concept') {
+      vipEl.textContent = '账号会话已验证 · 概念版会员与播放能力待确认';
+      vipEl.style.color = 'rgba(244,190,92,0.82)';
+    } else if (activeAccountProvider === 'netease') {
       var neVipLevel = providerVipLevel('netease', st);
       var vipLabel = neVipLevel === 'svip' ? '网易云 SVIP' : (neVipLevel === 'vip' ? '网易云 VIP' : '普通用户');
       vipEl.textContent = 'UID: ' + ((st && st.userId) || '-') + '  ·  ' + vipLabel;
@@ -23728,13 +23988,16 @@ function updateUserModalUi() {
       vipEl.style.color = hasProviderVip('qq', st) ? 'rgba(0,245,212,0.82)' : 'rgba(0,245,212,0.58)';
     }
   }
-  ['netease','qq','both'].forEach(function(key){
+  ['netease','qq','kugou-concept','both'].forEach(function(key){
     var btn = document.getElementById('user-provider-' + key);
     if (btn) btn.classList.toggle('active', key === 'both' ? dualAccountMode : (!dualAccountMode && activeAccountProvider === key));
   });
   if (addNetease) addNetease.style.display = hasPlatformLogin('netease') ? 'none' : '';
   if (addQQ) addQQ.textContent = hasPlatformLogin('qq') ? '查看 QQ 音乐' : '补登 QQ 音乐';
   if (logoutBtn) logoutBtn.textContent = activeAccountProvider === 'qq' ? '退出 QQ 音乐' : '退出网易云';
+  var addKugouConcept = document.getElementById('account-add-kugou-concept');
+  if (addKugouConcept) addKugouConcept.textContent = hasPlatformLogin('kugou-concept') ? '查看酷狗概念版' : '验证酷狗概念版';
+  if (logoutBtn && activeAccountProvider === 'kugou-concept') logoutBtn.textContent = '退出酷狗概念版';
   if (hint) hint.textContent = dualAccountMode
     ? '右上角已切换为双平台并排展示。'
     : '可切换右上角展示的平台；“我两个都要”会并排放两个登录状态。';
@@ -23746,7 +24009,7 @@ function showUserModal() {
 }
 function closeUserModal() { closeGsapModal(document.getElementById('user-modal')); }
 function setActiveAccountProvider(provider) {
-  provider = provider === 'qq' ? 'qq' : 'netease';
+  provider = provider === 'qq' || provider === 'kugou-concept' ? provider : 'netease';
   if (!hasPlatformLogin(provider)) {
     openProviderLogin(provider);
     return;
@@ -23778,12 +24041,22 @@ function requestDualLoginMode() {
   enableDualAccountView();
 }
 function openProviderLogin(provider) {
-  provider = provider === 'qq' ? 'qq' : 'netease';
+  provider = provider === 'qq' || provider === 'kugou-concept' ? provider : 'netease';
   closeUserModal();
   loginProvider = provider;
   showLoginModal({ provider: provider });
 }
 async function logoutActiveAccount() {
+  if (activeAccountProvider === 'kugou-concept') {
+    try { await apiJson('/api/kugou-concept/logout'); } catch (e) {}
+    try { if (window.desktopWindow && typeof window.desktopWindow.clearKugouConceptLogin === 'function') await window.desktopWindow.clearKugouConceptLogin(); } catch (e) {}
+    kugouConceptLoginStatus = { provider:'kugou-concept', loggedIn:false, verificationOnly:true, playbackSupported:false, nickname:'酷狗概念版' };
+    activeAccountProvider = firstLoggedProvider();
+    renderUserBtn();
+    if (hasAnyPlatformLogin()) updateUserModalUi(); else closeUserModal();
+    showToast('已退出酷狗概念版');
+    return;
+  }
   if (activeAccountProvider === 'qq') {
     try { await apiJson('/api/qq/logout'); } catch (e) {}
     try {
@@ -26523,7 +26796,7 @@ if (fx.floatLayer) createFloatLayer();
 if (fx.particleLyrics) createLyricsParticles();
 if (fx.backCover) createBackCoverLayer();
 initIdleGuideCanvas();
-var startupLoginStatusPromise = Promise.all([refreshLoginStatus(), refreshQQLoginStatus()]);
+var startupLoginStatusPromise = Promise.all([refreshLoginStatus(), refreshQQLoginStatus(), refreshKugouConceptLoginStatus()]);
 startQQLoginStatusAutoRefresh();
 if (startupLoginStatusPromise && startupLoginStatusPromise.then) {
   startupLoginStatusPromise.then(function(){

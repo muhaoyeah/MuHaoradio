@@ -1,5 +1,7 @@
 # Security Policy
 
+酷狗概念版会话文件 `.kugou-concept-cookie` 与其他登录凭据一样属于敏感数据，不得提交到 Git 或公开 Issue。
+
 ## Supported Versions
 
 当前只维护最新公开版本。
