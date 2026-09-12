@@ -17,7 +17,16 @@ B = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 EXCLUDE_DIRS = {"node_modules", ".git", "dist", "output", "backups", "__pycache__",
                 ".cache", "logs", "tmp", ".playwright-cli"}
-ALLOW_DIFF = {"package.json", "vendor/KuGouMusicApi/.env"}
+# 仓库/构建元数据类文件：与运行无关，允许两份不同
+ALLOW_DIFF = {
+    "package.json",              # 本体是完整源（含 electron-builder 配置），运行副本是打包后裁剪版
+    "package-lock.json",
+    ".gitignore",
+    ".gitattributes",
+    "NOTICE.md",
+    "SYNC-CONVENTION.md",
+    "vendor/KuGouMusicApi/.env",  # 环境相关配置
+}
 
 
 def walk(root):
@@ -63,7 +72,7 @@ def main():
     if unexpected:
         print(f"!! 发现 {len(unexpected)} 个非预期差异，请跑 sync-install-to-mirror.py 同步")
         return 1
-    print("✓ 两份代码一致（仅 package.json / .env 允许不同）")
+    print("✓ 两份代码一致（仅仓库元数据类文件允许不同）")
     return 0
 
 
