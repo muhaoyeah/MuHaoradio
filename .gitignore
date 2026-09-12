@@ -87,5 +87,8 @@ tools/build-win-artifacts.txt
 tools/build-win-versions.txt
 .npmrc
 
+# --- 一次性迁移脚本：已执行完毕，保留在本地磁盘，不进仓库（2026-09-13 加入）---
+tools/patch-phase-*
+
 # 第三方嵌套仓库：自带 .git，16MB，独立维护，不进本仓库
 vendor/KuGouMusicApi/
