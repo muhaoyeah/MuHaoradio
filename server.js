@@ -56,6 +56,8 @@ const {
 } = require('NeteaseCloudMusicApi');
 const http = require('http');
 const https = require('https');
+const dns  = require('dns');
+const net  = require('net');
 const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -136,10 +138,26 @@ const { planCuefieldTransitionFromCache } = require('./cuefield/mineradio-bridge
 const kugouLiteSession = require('./desktop/kugou-lite-session');
 const kugouLiteMedia = require('./desktop/kugou-lite-media');
 
+// 进程级异常兜底：记录日志后有序退出（不 swallow 续跑，避免状态不一致）。
+// 退出码 1 让 Electron 侧可识别异常终止；1.5s 延迟给 stdout/日志落盘时间。
+let mineradioFatalLogged = false;
+function mineradioFatalExit(kind, err) {
+  if (mineradioFatalLogged) return;
+  mineradioFatalLogged = true;
+  try {
+    const detail = err && (err.stack || err.message) ? (err.stack || err.message) : String(err);
+    console.error('[Server][' + kind + '] 未捕获异常，进程将退出:', detail);
+  } catch (_) { /* 日志本身失败也继续退出流程 */ }
+  setTimeout(() => process.exit(1), 1500);
+}
+process.on('uncaughtException', (err) => mineradioFatalExit('uncaughtException', err));
+process.on('unhandledRejection', (reason) => mineradioFatalExit('unhandledRejection', reason));
+
 const PORT = process.env.PORT || 3000;
-// Bare `node server.js` defaults to 0.0.0.0 (LAN-reachable).
-// Electron sets process.env.HOST='127.0.0.1' before requiring this module.
-const HOST = process.env.HOST || '0.0.0.0';
+// 默认只监听本机回环；显式 --lan 或 MINERADIO_LAN=1 才放宽到局域网。
+// Electron 启动路径本就注入 process.env.HOST='127.0.0.1'，此默认值只影响裸 `node server.js`。
+const LAN_MODE = process.argv.includes('--lan') || process.env.MINERADIO_LAN === '1';
+const HOST = process.env.HOST || (LAN_MODE ? '0.0.0.0' : '127.0.0.1');
 const LOGIN_EASTER_EGG_GATE_FILE = String(process.env.MINERADIO_LOGIN_EASTER_EGG_GATE_FILE || '');
 const LOGIN_EASTER_EGG_GATE_VERSION = String(process.env.MINERADIO_LOGIN_EASTER_EGG_GATE_VERSION || 'world-peace-v1');
 const LOGIN_EASTER_EGG_PROTECTED_ROUTES = new Set([
@@ -459,6 +477,107 @@ function rejectIfNonLocalOrigin(req, res) {
   if (isLocalOrMissingOrigin(origin)) return false;
   sendJSON(res, { error: 'ORIGIN_NOT_ALLOWED' }, 403);
   return true;
+}
+
+// ---------- SSRF 防护（T-06） ----------
+// 模式：默认「只记录不拦截」(record)，MINERADIO_SSRF_ENFORCE=1 时正式拦截。
+// 先跑记录模式观察一轮，确认无误伤后再开拦截，避免误伤走内网/短链跳转的正常封面与音频。
+const SSRF_ENFORCE = process.env.MINERADIO_SSRF_ENFORCE === '1';
+const SSRF_RECORD_LIMIT = 200;
+const ssrfRecordLog = [];
+function ssrfLog(entry) {
+  if (ssrfRecordLog.length >= SSRF_RECORD_LIMIT) return;
+  ssrfRecordLog.push(Object.assign({ at: new Date().toISOString() }, entry));
+  console.warn('[SSRF]', JSON.stringify(entry));
+}
+function isPrivateOrReservedIp(ip) {
+  if (net.isIPv6(ip)) {
+    const v = ip.toLowerCase();
+    if (v === '::1' || v === '::') return true;
+    if (v.startsWith('fe80:') || v.startsWith('fc') || v.startsWith('fd')) return true; // link-local / ULA
+    const m = v.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (m) return isPrivateOrReservedIp(m[1]); // IPv4-mapped
+    return false;
+  }
+  if (!net.isIPv4(ip)) return true; // 非 IP 形态一律视为不可信
+  const p = ip.split('.').map(Number);
+  if (p.length !== 4 || p.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return true;
+  const [a, b] = p;
+  if (a === 0 || a === 10 || a === 127) return true;                    // 0/8 10/8 127/8
+  if (a === 169 && b === 254) return true;                              // 169.254/16 链路本地+云元数据
+  if (a === 172 && b >= 16 && b <= 31) return true;                     // 172.16/12
+  if (a === 192 && b === 168) return true;                              // 192.168/16
+  if (a === 100 && b >= 64 && b <= 127) return true;                    // 100.64/10 CGNAT
+  if (a >= 224) return true;                                            // 组播/保留/240/4
+  if (a === 192 && b === 0 && (p[2] === 0 || p[2] === 2)) return true;  // 192.0.0/24 192.0.2/24
+  if (a === 198 && (b === 18 || b === 19)) return true;                 // 198.18/15 基准网段
+  if (a === 198 && b === 51 && p[2] === 100) return true;               // TEST-NET-2
+  if (a === 203 && b === 0 && p[2] === 113) return true;                // TEST-NET-3
+  return false;
+}
+function dnsLookupAll(hostname) {
+  return new Promise((resolve) => {
+    dns.lookup(hostname, { all: true, verbatim: true }, (err, addrs) => {
+      if (err || !addrs || !addrs.length) return resolve(null);
+      resolve(addrs.map(a => a.address));
+    });
+  });
+}
+// 校验代理目标：协议限 http(s)，解析后所有 A/AAAA 记录必须都是公网地址。
+// 返回 { ok, reason, ips }。DNS 解析失败按不可信处理。
+async function validateProxyTarget(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); } catch (e) { return { ok: false, reason: 'bad-url' }; }
+  if (!/^https?:$/.test(u.protocol)) return { ok: false, reason: 'bad-protocol:' + u.protocol };
+  const host = u.hostname;
+  if (!host) return { ok: false, reason: 'empty-host' };
+  if (/^(localhost|.*\.localhost|.*\.local|.*\.internal)$/i.test(host)) return { ok: false, reason: 'local-hostname:' + host };
+  if (net.isIP(host)) {
+    return isPrivateOrReservedIp(host)
+      ? { ok: false, reason: 'private-ip:' + host }
+      : { ok: true, ips: [host] };
+  }
+  const ips = await dnsLookupAll(host);
+  if (!ips) return { ok: false, reason: 'dns-fail:' + host };
+  const bad = ips.find(isPrivateOrReservedIp);
+  if (bad) return { ok: false, reason: 'resolves-private:' + host + '->' + bad, ips };
+  return { ok: true, ips };
+}
+// 带校验的 fetch：手动跟随重定向（最多 maxHops 跳），每一跳都过 validateProxyTarget。
+// record 模式下发现可疑只记录仍放行；enforce 模式直接拒绝。
+async function fetchProxyValidated(rawUrl, options, maxHops) {
+  let current = rawUrl;
+  const hops = (maxHops == null ? 3 : maxHops);
+  for (let i = 0; i <= hops; i++) {
+    const verdict = await validateProxyTarget(current);
+    if (!verdict.ok) {
+      ssrfLog({ action: SSRF_ENFORCE ? 'block' : 'record', reason: verdict.reason, url: current });
+      if (SSRF_ENFORCE) {
+        const err = new Error('SSRF_BLOCKED: ' + verdict.reason);
+        err.code = 'SSRF_BLOCKED';
+        throw err;
+      }
+    }
+    const resp = await fetch(current, Object.assign({}, options, { redirect: 'manual' }));
+    if (resp.status >= 300 && resp.status < 400) {
+      const loc = resp.headers.get('location');
+      if (!loc) return resp;
+      try { resp.body && resp.body.cancel && resp.body.cancel(); } catch (_) {}
+      current = new URL(loc, current).href;
+      continue;
+    }
+    return resp;
+  }
+  const err = new Error('SSRF_TOO_MANY_REDIRECTS');
+  err.code = 'SSRF_BLOCKED';
+  ssrfLog({ action: SSRF_ENFORCE ? 'block' : 'record', reason: 'too-many-redirects', url: rawUrl });
+  throw err;
+}
+// 媒体响应的 CORS 头：只对本地来源回显 Origin，不再使用 '*'；同源请求无需 ACAO，直接省略
+function mediaCorsHeaders(req) {
+  const origin = req && req.headers ? req.headers.origin : undefined;
+  if (origin && isLocalOrMissingOrigin(origin)) return { 'Access-Control-Allow-Origin': String(origin) };
+  return {};
 }
 function serveStatic(res, filePath) {
   const ext = path.extname(filePath);
@@ -2963,22 +3082,20 @@ function sendAudioBuffer(res, buffer, contentType, range) {
       res.end();
       return;
     }
-    res.writeHead(206, {
+    res.writeHead(206, Object.assign({
       'Content-Type': contentType || 'audio/mp4',
-      'Access-Control-Allow-Origin': '*',
       'Accept-Ranges': 'bytes',
       'Content-Length': end - start + 1,
       'Content-Range': 'bytes ' + start + '-' + end + '/' + total,
-    });
+    }, mediaCorsHeaders(res.req)));
     res.end(buffer.subarray(start, end + 1));
     return;
   }
-  res.writeHead(200, {
+  res.writeHead(200, Object.assign({
     'Content-Type': contentType || 'audio/mp4',
-    'Access-Control-Allow-Origin': '*',
     'Accept-Ranges': 'bytes',
     'Content-Length': total,
-  });
+  }, mediaCorsHeaders(res.req)));
   res.end(buffer);
 }
 
@@ -7092,34 +7209,38 @@ if (pn === '/api/kugou-concept/login/status') {
 
   // ---------- 封面代理 (带 CORS 头, 给 canvas 提取像素用) ----------
   if (pn === '/api/cover') {
+    if (rejectIfNonLocalOrigin(req, res)) return;
     try {
       const coverUrl = url.searchParams.get('url');
       // URL 校验: 必须是 http(s) 开头, 否则直接 404 (不要让 fetch 抛错)
       if (!coverUrl || !/^https?:\/\//i.test(coverUrl)) {
-        res.writeHead(400, { 'Access-Control-Allow-Origin': '*' });
+        res.writeHead(400, mediaCorsHeaders(req));
         res.end('Invalid cover url');
         return;
       }
-      const resp = await fetch(coverUrl, { headers: { 'User-Agent': UA, 'Referer': 'https://music.163.com/' } });
+      const resp = await fetchProxyValidated(coverUrl, { headers: { 'User-Agent': UA, 'Referer': 'https://music.163.com/' } }, 3);
       const ct  = resp.headers.get('content-type') || 'image/jpeg';
       const cl  = resp.headers.get('content-length');
-      const hdr = {
+      const hdr = Object.assign({
         'Content-Type': ct,
-        'Access-Control-Allow-Origin': '*',
         'Cross-Origin-Resource-Policy': 'cross-origin',
         'Cache-Control': 'public, max-age=86400',
-      };
+      }, mediaCorsHeaders(req));
       if (cl) hdr['Content-Length'] = cl;
       res.writeHead(resp.status, hdr);
       const reader = resp.body.getReader();
       while (true) { const c = await reader.read(); if (c.done) break; res.write(c.value); }
       res.end();
-    } catch (err) { console.error('[Cover]', err); res.writeHead(500); res.end(); }
+    } catch (err) {
+      if (err && err.code === 'SSRF_BLOCKED') { res.writeHead(403, mediaCorsHeaders(req)); res.end('Blocked by SSRF policy'); return; }
+      console.error('[Cover]', err); res.writeHead(500); res.end();
+    }
     return;
   }
 
   // ---------- 音频代理 (支持 Range) ----------
   if (pn === '/api/audio') {
+    if (rejectIfNonLocalOrigin(req, res)) return;
     try {
       const audioUrl = url.searchParams.get('url');
       if (!audioUrl) { res.writeHead(400); res.end('Missing url'); return; }
@@ -7132,13 +7253,12 @@ if (pn === '/api/kugou-concept/login/status') {
         }
       }
       const hdr = audioProxyHeadersFor(audioUrl, range);
-      const up = await fetchWithTimeout(audioUrl, { headers: hdr }, 9000);
-      const out = {
+      const up = await fetchProxyValidated(audioUrl, { headers: hdr, signal: AbortSignal.timeout(9000) }, 3);
+      const out = Object.assign({
         'Content-Type': audioContentTypeForUrl(audioUrl, up.headers.get('content-type')),
-        'Access-Control-Allow-Origin': '*',
         'Accept-Ranges': 'bytes',
         'Cache-Control': 'no-store',
-      };
+      }, mediaCorsHeaders(req));
       const cl = up.headers.get('content-length'); if (cl) out['Content-Length'] = cl;
       const cr = up.headers.get('content-range');  if (cr) out['Content-Range']  = cr;
       res.writeHead(up.status, out);
@@ -7165,11 +7285,16 @@ if (pn === '/api/kugou-concept/login/status') {
       if (clientClosed) return;
       res.end();
     } catch (err) {
+      if (err && err.code === 'SSRF_BLOCKED') {
+        if (!res.headersSent) { res.writeHead(403, mediaCorsHeaders(req)); res.end('Blocked by SSRF policy'); }
+        else { try { res.destroy(); } catch (_) {} }
+        return;
+      }
       console.error('[Audio]', err && (err.code || err.name || err.message || 'AUDIO_PROXY_FAILED'));
       if (res.headersSent) {
         try { res.destroy(); } catch (_) {}
       } else {
-        res.writeHead(err && err.name === 'AbortError' ? 504 : 502, { 'Cache-Control': 'no-store' });
+        res.writeHead(err && (err.name === 'AbortError' || err.name === 'TimeoutError') ? 504 : 502, { 'Cache-Control': 'no-store' });
         res.end();
       }
     }
