@@ -89,6 +89,7 @@ function makeCtx2D(stats) {
 function runScenario(opts) {
   const stats = { ops: 0, curves: 0, gradients: 0, clears: 0, rafFrames: 0, errors: [], pts: [], pointFrames: [] };
   const rafQueue = new Map();
+  const listeners = { window: new Map(), document: new Map() };
   let rafSeq = 1;
   let now = 1000;
 
@@ -119,8 +120,8 @@ function runScenario(opts) {
     devicePixelRatio: 1,
     innerWidth: 1280,
     innerHeight: 720,
-    matchMedia: () => ({ matches: !!opts.reducedMotion }),
-    addEventListener() {},
+    matchMedia: (q) => ({ matches: /prefers-reduced-motion/.test(q) ? !!opts.reducedMotion : (/pointer:\s*coarse/.test(q) ? !!opts.coarsePointer : false) }),
+    addEventListener(type, fn) { listeners.window.set(type, fn); },
     removeEventListener() {},
     requestAnimationFrame(fn) {
       const id = rafSeq++;
@@ -160,6 +161,11 @@ function runScenario(opts) {
   const totalMs = opts.totalMs || 4200;
   for (let t = 0; t <= totalMs; t += 16) {
     now += 16;
+    /* 场景可按帧注入合成事件（如 pointermove），驱动交互代码路径 */
+    if (opts.onFrame) {
+      try { opts.onFrame(t, { listeners, splashEl }); }
+      catch (e) { stats.errors.push('onFrame 注入异常: ' + e.message); return stats; }
+    }
     const batch = [...rafQueue.values()];
     rafQueue.clear();
     if (batch.length === 0) break;
@@ -242,6 +248,41 @@ console.log('\n=== 场景 4：canvas 2D 不可用（应静默降级） ===');
 const d = runScenario({ reducedMotion: false, totalMs: 800, noCanvas2D: true });
 check('无异常', d.errors.length === 0, d.errors.join(' | '));
 check('canvas 未留在 DOM 上', d.canvasStillMounted === false);
+
+console.log('\n=== 场景 5：指针交互（视差/吸引环/花粉打旋/辉光） ===');
+const e = runScenario({
+  reducedMotion: false,
+  totalMs: 4200,
+  onFrame: (t, { listeners }) => {
+    /* 指针沿圆周快速移动：最坏情况下的位移速率，抓"瞬移/跳变" */
+    const fn = listeners.window.get('pointermove');
+    if (fn && t % 48 === 0) {
+      const ang = t * 0.02;
+      fn({ clientX: 640 + Math.cos(ang) * 400, clientY: 360 + Math.sin(ang) * 260 });
+    }
+  }
+});
+check('全程无异常', e.errors.length === 0, e.errors.join(' | '));
+check('画了多帧（>120 帧）', e.clears > 120, '实际 ' + e.clears + ' 帧');
+const smE = smoothness(e.pointFrames);
+check('取到足够的可比帧对（>=30）', smE.pairs >= 30, '实际 ' + smE.pairs + ' 对');
+/* 交互允许更大的帧间位移（拨开强度 44px 经 110ms 低通 ≈ 每帧 6px 量级），
+   但仍必须有界：超过 20px 就是"瞬移"，说明低通失效 */
+check('指针快速移动下每帧平均位移 < 6.0px', smE.mean < 6.0, '实际 ' + smE.mean.toFixed(3) + 'px');
+check('指针快速移动下每帧最大位移 < 20.0px（无瞬移）', smE.max < 20.0, '实际 ' + smE.max.toFixed(3) + 'px');
+
+console.log('\n=== 场景 6：粗指针（触屏）降载路径 ===');
+const f = runScenario({
+  reducedMotion: false,
+  coarsePointer: true,
+  totalMs: 3000,
+  onFrame: (t, { listeners }) => {
+    const fn = listeners.window.get('pointermove');
+    if (fn && t % 64 === 0) fn({ clientX: 200 + (t % 800), clientY: 500 });
+  }
+});
+check('全程无异常', f.errors.length === 0, f.errors.join(' | '));
+check('画了多帧（>80 帧）', f.clears > 80, '实际 ' + f.clears + ' 帧');
 
 console.log('\n' + (failed === 0
   ? '全部通过 —— 这层动效可以挂进启动页'

@@ -1,5 +1,5 @@
 /* ============================================================================
- * 启动页 · 自然生长动效（Sylva 机制的本土化移植 · 档位 A）
+ * 启动页 · 自然生长动效（Sylva 机制的本土化移植 · 档位 A+ 视觉增强版）
  * ----------------------------------------------------------------------------
  * 硬约束（来自 桌面/Sylva-对照MuHaoradio-动效细表.md）：
  *   1. 不修改 10-shell/03-splash.js —— 本文件是纯增量层
@@ -8,16 +8,19 @@
  *   4. 覆盖 prefers-reduced-motion
  *   5. 任何异常静默降级 —— 绝不能让启动页卡住、绝不能影响进入流程
  *
- * 移植的三个机制：
- *   ① 程序化生长  分形分叉的藤蔓从画面下缘向上生长，带缓动与锥度
- *   ② 草叶拨开    指针位移场把附近草叶向两侧推开（Sylva 的核心交互）
- *   ③ 花粉飘散    生长末端持续吐出光尘，向上飘升，并受指针扰动
+ * 移植与增强的机制：
+ *   ① 程序化生长  分形分叉的藤蔓从画面下缘向上生长（生长曲线 easeOutQuint）
+ *   ② 草叶拨开    指针位移场把附近草叶向两侧推开；中距离有"吸引环"微微回拢
+ *   ③ 花粉飘散    生长末端持续吐出光尘，向上飘升，靠近指针时绕其打旋
+ *   ④ 三层景深    远/中/近三个平面：不同锥度、透明度、摆速与视差系数
+ *   ⑤ 指针辉光    一团柔和的跟随光（一阶低通拖尾），只在指针在场时出现
+ *   ⑥ 入场编排    整体呼吸淡入 → 枝干生长 → 叶片回弹绽放 → 花粉亮起
  *
  * ── 关于"摆动"的两条铁律（2026-09-13 修正高频抖动后确立）──────────────
  *   ① 【时间单位】本文件里 `elapsed` 是**毫秒**（用于 CFG 里的各段时机），
  *      但所有正弦振荡必须用**秒**（`sec = elapsed / 1000`）。
  *      把毫秒直接塞进 sin() 会让频率变成几百 Hz，远超帧率 → 相位混叠 → 满屏抖动。
- *   ② 【低通滤波】指针位置、指针在场强度、以及每个节点的位移量，
+ *   ② 【低通滤波】指针位置、指针在场强度、视差偏移、以及每个节点的位移量，
  *      全部走一阶低通（`1 - Math.exp(-dt / tau)`，与帧率无关），
  *      不允许任何量直接从"目标值"跳到"当前值"。
  *
@@ -37,6 +40,11 @@
   try {
     reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   } catch (e) { reducedMotion = false; }
+  /* 触屏（无悬停）设备：拨开与辉光照常工作，但持续视差关掉，降载保帧率 */
+  var coarsePointer = false;
+  try {
+    coarsePointer = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  } catch (e) { coarsePointer = false; }
 
   /* --- 可调参数：想改观感只动这里 ------------------------------------- */
   var CFG = {
@@ -56,12 +64,35 @@
     fadeOutMs: 2980,         // 开始淡出（启动页 3500ms 自动进入）
     zIndex: 4,               // 压在光缝(5)之下、噪点(3)之上
 
+    /* 入场编排 */
+    introMs: 460,            // 整体呼吸式淡入时长
+    bladeBloomMs: 620,       // 单片草叶绽放用时（easeOutBack 回弹）
+
+    /* 三层景深平面：0 远 / 1 中 / 2 近 */
+    planeAlpha: [0.42, 0.72, 1.0],     // 各平面整体透明度系数
+    planeSway: [0.55, 0.8, 1.0],       // 各平面摆动幅度系数
+    planeWidth: [0.55, 0.8, 1.0],      // 各平面线宽系数
+    planeReach: [0.72, 0.88, 1.0],     // 各平面生长高度系数
+    parallaxMax: 15,                   // 视差最大位移（px，近平面）
+    planeParallax: [0.35, 0.7, 1.0],   // 各平面视差系数（越远越小 → 纵深）
+    parallaxTauMs: 260,                // 视差低通时间常数（越大约"沉"）
+
+    /* 指针交互 */
+    attractRadius: 340,        // 吸引环外径（>拨开半径的环形带微微回拢）
+    attractStrength: 7,        // 吸引环最大位移（px，远小于拨开，避免"吸附感"）
+    glowRadius: 250,           // 指针辉光半径
+    glowAlpha: 0.16,           // 指针辉光峰值透明度
+    pollenOrbitRadius: 190,    // 花粉绕指针打旋的作用半径
+    pollenOrbit: 0.00045,      // 打旋切向速度系数
+
     /* 摆动 —— 单位一律是 Hz（每秒周期数），不是 rad/ms */
     swayHzA: 0.42,           // 藤蔓主摆：周期约 2.4s
     swayHzB: 0.17,           // 藤蔓次摆：周期约 5.9s（叠加出"呼吸"感）
     bladeSwayHzA: 0.55,      // 草叶主摆
     bladeSwayHzB: 0.23,
     wavePerNode: 0.09,       // 沿藤蔓的行波相位差（越小越像整体摆动）
+    breezeHz: 0.09,          // 全场共享的微风（所有藤往同一方向缓慢倾斜）
+    breezeAmp: 2.2,          // 微风振幅（px，按节点高度加权）
     pointerTauMs: 70,        // 指针位置低通时间常数
     pressTauMs: 150,         // 指针"在场"强度过渡
     offsetTauMs: 110         // 每个节点/草叶位移量低通时间常数
@@ -81,6 +112,15 @@
   function rnd(a, b) { return a + Math.random() * (b - a); }
   function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
   function easeOutCubic(t) { t = clamp01(t); var u = 1 - t; return 1 - u * u * u; }
+  /* 生长用 easeOutQuint：起手快、收尾非常柔，藤蔓像"窜一下再从容到位" */
+  function easeOutQuint(t) { t = clamp01(t); var u = 1 - t; return 1 - u * u * u * u * u; }
+  /* 草叶绽放用 easeOutBack：轻微过冲后回稳，有"弹开"的生命力 */
+  function easeOutBack(t) {
+    t = clamp01(t);
+    var c1 = 1.35, c3 = c1 + 1;   // 过冲量克制在 ~6%，太大就显廉价
+    var u = t - 1;
+    return 1 + c3 * u * u * u + c1 * u * u;
+  }
   function smoothstep(e0, e1, x) {
     var t = clamp01((x - e0) / Math.max(0.0001, e1 - e0));
     return t * t * (3 - 2 * t);
@@ -138,9 +178,15 @@
     var ampScale = Math.max(0.55, Math.min(1.5, h / 720));
 
     for (var i = 0; i < rootCount; i++) {
+      /* 景深平面分配：中间密、两头稀；约 3:4:3 的近中远配比 */
+      var plane = (i % 3 === 0) ? 0 : (i % 3 === 1 ? 2 : 1);
       var baseX = (i + 0.5) / rootCount * w + rnd(-w * 0.045, w * 0.045);
-      stems.push(growStem(baseX, h + rnd(8, 30), -Math.PI / 2 + rnd(-0.40, 0.40),
-        h * rnd(CFG.reachMin, CFG.reachMax), maxSegs, 0, ampScale, w, h));
+      var st = growStem(baseX, h + rnd(8, 30), -Math.PI / 2 + rnd(-0.40, 0.40),
+        h * rnd(CFG.reachMin, CFG.reachMax) * CFG.planeReach[plane],
+        Math.max(6, Math.round(maxSegs * (0.75 + 0.25 * CFG.planeWidth[plane]))),
+        0, ampScale * CFG.planeSway[plane], w, h);
+      st.plane = plane;
+      stems.push(st);
     }
     return stems;
   }
@@ -171,6 +217,7 @@
       swayAmp: rnd(3.0, 6.6) * ampScale * (depth === 0 ? 1 : 0.62),
       warm: Math.random() < 0.34,
       depth: depth,
+      plane: depth === 0 ? 1 : -1,   // 子藤继承父藤平面（buildStems 里对根覆写）
       width: depth === 0 ? rnd(1.5, 2.3) : rnd(0.85, 1.35)
     };
     /* 分叉：从后半段挑节点再长出子藤 */
@@ -203,6 +250,10 @@
           flattenStems([stems[i].children[c].stem], out);
         }
       }
+    }
+    /* 子藤继承根藤的景深平面 */
+    for (var j = 0; j < out.length; j++) {
+      if (out[j].plane < 0) out[j].plane = 1;
     }
     return out;
   }
@@ -265,6 +316,8 @@
 
     var ctx = canvas.getContext('2d');
     if (!ctx) { canvas.remove(); return; }
+    /* 径向渐变在老桩/极小概率环境下可能缺失：没有就降级不用指针辉光 */
+    var hasRadialGradient = typeof ctx.createRadialGradient === 'function';
 
     var w = 0, h = 0, dpr = 1;
     var flat = [], blades = [], pollen = [];
@@ -272,9 +325,15 @@
     var stopped = false;
     var lastTime = 0;
 
+    /* 触屏设备降载：半径与花粉量打折，保帧率 */
+    var pushRadius = coarsePointer ? CFG.pushRadius * 0.85 : CFG.pushRadius;
+    var pollenMax = coarsePointer ? Math.round(CFG.pollenMax * 0.62) : CFG.pollenMax;
+
     /* 指针状态：x/y 是原始目标，sx/sy 是低通后的实际采样点，press 是在场强度。
        三者都平滑，草叶才不会随鼠标"瞬移"。 */
     var ptr = { x: 0, y: 0, sx: 0, sy: 0, ready: false, press: 0, pressTarget: 0 };
+    /* 视差状态：指针相对画面中心的归一化偏移（-1..1），低通后用于分层位移 */
+    var plx = { x: 0, y: 0 };
 
     /* 对齐启动页自己的时间轴：03-splash.js 里有全局 splashStartedAt。
        用 typeof 软引用，拿不到就退化成自己的启动时刻。 */
@@ -298,6 +357,7 @@
       lastEmit = 0;
       /* 重建几何后指针低通状态要重置，否则会从旧位置"飞"过来 */
       ptr.ready = false;
+      plx.x = 0; plx.y = 0;
     }
     var lastEmit = 0;
 
@@ -308,39 +368,56 @@
       ptr.sy += (ptr.y - ptr.sy) * kp;
       var ka = lowpass(dt, CFG.pressTauMs);
       ptr.press += (ptr.pressTarget - ptr.press) * ka;
+      /* 视差低通：目标是指针相对中心的归一化偏移。触屏无悬停，平时归零，
+         手指按住拖动时随 press 生效（press 本身就是低通量，天然平滑）。 */
+      var kx = lowpass(dt, CFG.parallaxTauMs);
+      var txp = coarsePointer ? 0 : (ptr.sx / Math.max(1, w) - 0.5) * 2;
+      var typ = coarsePointer ? 0 : (ptr.sy / Math.max(1, h) - 0.5) * 2;
+      plx.x += (txp * ptr.press - plx.x) * kx;
+      plx.y += (typ * ptr.press - plx.y) * kx;
     }
 
-    /* 指针位移场：返回该点应被推开的偏移量。
-       平方衰减 —— 越近推得越狠，边缘平滑归零，不会出现硬边。
-       采样点用的是低通后的指针位置。 */
+    /* 指针位移场：近距推开（Sylva 核心交互），中距环形带微微回拢（吸引环）。
+       推开用平方衰减，吸引用 (1 - d/r) 线性衰减封顶，两个场在拨开半径处都归零，
+       过渡连续、不会出现硬边。采样点用低通后的指针位置。 */
     function pushAt(x, y) {
       if (ptr.press <= 0.002) return null;
       var dx = x - ptr.sx;
       var dy = y - ptr.sy;
       var d2 = dx * dx + dy * dy;
-      var r = CFG.pushRadius;
-      if (d2 > r * r) return null;
+      var r = pushRadius;
+      if (d2 > CFG.attractRadius * CFG.attractRadius) return null;
       var d = Math.sqrt(d2) || 0.0001;
-      var fall = 1 - d / r;
-      var mag = fall * fall * CFG.pushStrength * ptr.press;
-      return { x: (dx / d) * mag, y: (dy / d) * mag };
+      if (d <= r) {
+        var fall = 1 - d / r;
+        var mag = fall * fall * CFG.pushStrength * ptr.press;
+        return { x: (dx / d) * mag, y: (dy / d) * mag };
+      }
+      /* 吸引环：r < d <= attractRadius，往指针方向轻拉，越靠近外缘越弱 */
+      var ring = 1 - (d - r) / Math.max(1, CFG.attractRadius - r);
+      var pull = ring * CFG.attractStrength * ptr.press;
+      return { x: -(dx / d) * pull, y: -(dy / d) * pull };
     }
 
     /* 每帧先把一条藤的所有节点位置算好（含摆动与低通位移），
        绘制阶段直接读 nodes[i]。这样每个节点每帧只算一次 ——
        之前是每段算两次，若在节点上做低通就会被重复施加，滤波失效。 */
-    function updateStemCoords(st, elapsed, sec, dt) {
+    function updateStemCoords(st, elapsed, sec, dt, breeze) {
       var pts = st.pts;
       var nodes = st.nodes;
       var p = clamp01((elapsed - st.t0) / st.dur);
-      st.grow = easeOutCubic(p);
+      st.grow = easeOutQuint(p);
       st.visible = p <= 0 ? 0 : Math.max(1, Math.floor(pts.length * st.grow));
+
+      var parX = plx.x * CFG.parallaxMax * CFG.planeParallax[st.plane];
+      var parY = plx.y * CFG.parallaxMax * 0.6 * CFG.planeParallax[st.plane];
 
       var ko = lowpass(dt, CFG.offsetTauMs);
       for (var i = 0; i < pts.length; i++) {
         var pt = pts[i];
         var sway = breathe(sec, CFG.swayHzA, CFG.swayHzB, st.swayPhase + i * CFG.wavePerNode)
-          * st.swayAmp * pt.k * 0.62;
+          * st.swayAmp * pt.k * 0.62
+          + breeze * pt.k;   // 全场微风：各藤同向缓倾，越高越明显
 
         var hit = pushAt(pt.x, pt.y);
         var tx = hit ? hit.x : 0;
@@ -349,8 +426,8 @@
         pt._py += (ty - pt._py) * ko;
 
         var n = nodes[i] || (nodes[i] = { x: 0, y: 0 });
-        n.x = pt.x + sway + pt._px;
-        n.y = pt.y + pt._py * 0.6;
+        n.x = pt.x + sway + pt._px + parX;
+        n.y = pt.y + pt._py * 0.6 + parY;
       }
     }
 
@@ -360,6 +437,10 @@
       var total = st.pts.length;
       var nodes = st.nodes;
       var rgb = st.warm ? GOLD_RGB : ACCENT_RGB;
+      /* rgba 前缀按藤缓存：一段一拼的字符串分配是 GC 大头 */
+      var rgbPrefix = 'rgba(' + rgb + ',';
+      var planeAlpha = CFG.planeAlpha[st.plane];
+      var planeWidth = CFG.planeWidth[st.plane];
       /* 生长头部柔和淡入，避免出现"硬边推进"的跳变 */
       var headIn = smoothstep(0, 0.30, clamp01((st.grow * total) / total));
 
@@ -370,10 +451,10 @@
         /* 锥度：根部粗、末端细 */
         var taper = (1 - k * 0.72) * (st.depth === 0 ? 1 : 0.7);
         var headFade = (i > visible - 4) ? (visible - i - 1) / 3 : 1;
-        var alpha = (0.16 + 0.42 * taper) * headFade * headIn;
+        var alpha = (0.16 + 0.42 * taper) * headFade * headIn * planeAlpha;
         if (alpha <= 0.004) continue;
-        ctx.strokeStyle = 'rgba(' + rgb + ',' + alpha.toFixed(3) + ')';
-        ctx.lineWidth = Math.max(0.35, st.width * taper * headFade);
+        ctx.strokeStyle = rgbPrefix + alpha.toFixed(3) + ')';
+        ctx.lineWidth = Math.max(0.35, st.width * taper * headFade * planeWidth);
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
@@ -384,10 +465,12 @@
     function drawBlade(bl, elapsed, sec, dt) {
       var st = bl.stem;
       if (st.visible <= 1) return;
-      /* 草叶出现的时机比藤蔓略晚，形成"先枝干后叶片"的层次 */
-      var local = clamp01(((elapsed - st.t0) - bl.at * 12) / 620);
+      /* 草叶出现的时机比藤蔓略晚，形成"先枝干后叶片"的层次；
+         绽放用 easeOutBack：轻微过冲，像真的弹开 */
+      var local = clamp01(((elapsed - st.t0) - bl.at * 12) / CFG.bladeBloomMs);
       if (local <= 0) return;
-      var grow = easeOutCubic(local);
+      var grow = easeOutBack(local);
+      var growFade = smoothstep(0, 0.25, local);   // 透明度不过冲，避免负 alpha 闪烁
 
       var idx = Math.min(bl.at, st.pts.length - 1);
       var base = st.nodes[idx];
@@ -415,9 +498,9 @@
 
       var rgb = bl.warm ? GOLD_RGB : ACCENT_RGB;
       /* 顶端草叶淡一点，根部浓一点，避免糊成一团 */
-      var alpha = (0.20 + 0.34 * grow) * (1 - (bl.at / Math.max(1, st.pts.length)) * 0.35);
+      var alpha = (0.20 + 0.34 * growFade) * (1 - (bl.at / Math.max(1, st.pts.length)) * 0.35) * CFG.planeAlpha[st.plane];
       ctx.strokeStyle = 'rgba(' + rgb + ',' + alpha.toFixed(3) + ')';
-      ctx.lineWidth = Math.max(0.35, bl.width * grow);
+      ctx.lineWidth = Math.max(0.35, bl.width * Math.max(0.15, grow) * CFG.planeWidth[st.plane]);
       ctx.beginPath();
       ctx.moveTo(base.x, base.y);
       ctx.quadraticCurveTo(midX, midY, tipX, tipY);
@@ -426,21 +509,25 @@
 
     function emitPollen(elapsed) {
       if (elapsed < CFG.pollenStartMs) return;
-      if (pollen.length >= CFG.pollenMax) return;
+      if (pollen.length >= pollenMax) return;
       /* 从已经长到中后段的藤蔓末端吐出花粉 */
       var st = flat[(Math.random() * flat.length) | 0];
       if (!st || st.visible <= 1) return;
       if (clamp01((elapsed - st.t0) / st.dur) < 0.55) return;
       var tip = st.pts[st.pts.length - 1];
       if (tip.y > h * 0.98) return;
+      var px = tip.x + rnd(-16, 16);
+      /* 指针在场时花粉略微朝指针侧偏移，画面有"回应感" */
+      if (ptr.press > 0.3) px += (ptr.sx - px) * 0.18 * ptr.press;
       pollen.push({
-        x: tip.x + rnd(-16, 16),
+        x: px,
         y: tip.y + rnd(-12, 12),
         vx: rnd(-0.22, 0.22),
         vy: rnd(-0.58, -0.16),
         r: rnd(0.7, 1.9),
         life: 0,
         maxLife: rnd(2400, 5200),
+        gold: Math.random() < 0.4,
         phase: rnd(0, Math.PI * 2)
       });
     }
@@ -458,10 +545,21 @@
           m.x += hit.x * 0.045;
           m.y += hit.y * 0.02;
         }
+        /* 靠近指针的光尘绕其打旋（切向速度），像被气流卷起 */
+        if (ptr.press > 0.01) {
+          var dx = m.x - ptr.sx;
+          var dy = m.y - ptr.sy;
+          var od = Math.sqrt(dx * dx + dy * dy) || 0.0001;
+          if (od < CFG.pollenOrbitRadius) {
+            var swirl = (1 - od / CFG.pollenOrbitRadius) * CFG.pollenOrbit * ptr.press * dt;
+            m.x += (-dy / od) * swirl * od;
+            m.y += (dx / od) * swirl * od * 0.6;
+          }
+        }
         var t = m.life / m.maxLife;
         var alpha = Math.sin(Math.PI * clamp01(t)) * 0.5;
         if (alpha <= 0.004) continue;
-        ctx.fillStyle = 'rgba(' + POLLEN_RGB + ',' + alpha.toFixed(3) + ')';
+        ctx.fillStyle = 'rgba(' + (m.gold ? GOLD_RGB : POLLEN_RGB) + ',' + alpha.toFixed(3) + ')';
         ctx.beginPath();
         ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
         ctx.fill();
@@ -480,6 +578,19 @@
       ctx.fillRect(0, h - h * 0.30, w, h * 0.30);
     }
 
+    /* 指针辉光：一团低通拖尾的跟随光，把"指针在场"这件事可视化 */
+    function drawPointerGlow() {
+      if (!hasRadialGradient || ptr.press <= 0.01) return;
+      var r = CFG.glowRadius;
+      var a = CFG.glowAlpha * ptr.press;
+      var g = ctx.createRadialGradient(ptr.sx, ptr.sy, 0, ptr.sx, ptr.sy, r);
+      g.addColorStop(0, 'rgba(' + ACCENT_RGB + ',' + a.toFixed(3) + ')');
+      g.addColorStop(0.45, 'rgba(' + GOLD_RGB + ',' + (a * 0.35).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(ptr.sx - r, ptr.sy - r, r * 2, r * 2);
+    }
+
     function frame(now) {
       if (stopped) return;
       rafId = requestAnimationFrame(frame);
@@ -494,6 +605,8 @@
 
         var exitAlpha = 1 - smoothstep(CFG.fadeOutMs, CFG.fadeOutMs + 520, elapsed);
         if (splashEl.classList.contains('exiting')) exitAlpha = Math.min(exitAlpha, 0.35);
+        /* 入场呼吸：整层从 0 柔亮，避免动效"啪"地出现 */
+        var introAlpha = smoothstep(0, CFG.introMs, elapsed);
 
         updatePointer(dt);
 
@@ -503,15 +616,21 @@
         if (exitAlpha <= 0.004) { teardown(); return; }
 
         ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = exitAlpha;
+        ctx.globalAlpha = exitAlpha * introAlpha;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
         drawGroundGlow(elapsed);
 
+        /* 全场微风：所有藤共享一个慢相位，画面像被同一股气流吹过 */
+        var breeze = breathe(sec, CFG.breezeHz, CFG.breezeHz * 0.37, 0) * CFG.breezeAmp;
+
         var i;
-        for (i = 0; i < flat.length; i++) updateStemCoords(flat[i], elapsed, sec, dt);
-        for (i = 0; i < flat.length; i++) drawStem(flat[i]);
+        for (i = 0; i < flat.length; i++) updateStemCoords(flat[i], elapsed, sec, dt, breeze);
+        /* 远平面先画、近平面后画：叠加顺序即景深顺序 */
+        for (i = 0; i < flat.length; i++) if (flat[i].plane === 0) drawStem(flat[i]);
+        for (i = 0; i < flat.length; i++) if (flat[i].plane === 1) drawStem(flat[i]);
+        for (i = 0; i < flat.length; i++) if (flat[i].plane === 2) drawStem(flat[i]);
         for (i = 0; i < blades.length; i++) drawBlade(blades[i], elapsed, sec, dt);
 
         if (reducedMotion) {
@@ -526,6 +645,7 @@
 
         if (elapsed - lastEmit > 92) { lastEmit = elapsed; emitPollen(elapsed); }
         drawPollen(dt, sec);
+        drawPointerGlow();
 
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = 'source-over';
