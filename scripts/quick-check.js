@@ -346,7 +346,7 @@ function checkWallpaperEngineImportGuard() {
   logStep('Wallpaper Engine additive import guard');
   const htmlText = fs.readFileSync(path.join(appRoot, 'public', 'index.html'), 'utf8');
   const cssText = fs.readFileSync(path.join(appRoot, 'public', 'css', 'index.css'), 'utf8');
-  const rendererPath = path.join(appRoot, 'public', 'js', 'modules', '07-fx', '03-wallpaper-engine-library.js');
+  const rendererPath = path.join(appRoot, 'public', 'js', 'modules', '07-fx', '03a-wallpaper-engine-library.js');
   const rendererText = fs.readFileSync(rendererPath, 'utf8');
   const controlGlassText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '05-playback', '15-control-glass-animations.js'), 'utf8');
   const mainText = fs.readFileSync(path.join(appRoot, 'desktop', 'main.js'), 'utf8');
@@ -1009,7 +1009,7 @@ function checkLyricScrollPerformanceGuard() {
   const stageText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '02-visual', '14-stage-lyrics-rendering.js'), 'utf8');
   const lyricText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '06-lyrics', '00-lyrics-fetch-parse.js'), 'utf8');
   const lyricColorText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '07-fx', '01-lyric-color-controls.js'), 'utf8');
-  const lyricColorSetterText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '07-fx', '03-cover-picker-fonts.js'), 'utf8');
+  const lyricColorSetterText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '07-fx', '03b-cover-picker-fonts.js'), 'utf8');
   const fxBindText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '07-fx', '07-bindings-shelf-immersive.js'), 'utf8');
   const fxPanelText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '07-fx', '05-fx-panel-performance.js'), 'utf8');
   const playbackText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '05-playback', '13-playback-start-audio.js'), 'utf8');
@@ -1381,7 +1381,7 @@ function checkExternalUpdatePageBridgeGuard() {
   const mainText = fs.readFileSync(path.join(appRoot, 'desktop', 'main.js'), 'utf8');
   const preloadText = fs.readFileSync(path.join(appRoot, 'desktop', 'preload.js'), 'utf8');
   const serverText = fs.readFileSync(path.join(appRoot, 'server.js'), 'utf8');
-  const updateUiText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '08-account', '00-update-preview.js'), 'utf8');
+  const updateUiText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '08-account', '00a-update-preview.js'), 'utf8');
   const bridgeText = mainText + '\n' + preloadText;
   if (
     !/ipcMain\.handle\('mineradio-open-update-page', async \(event, value\) =>/.test(mainText)
@@ -3028,8 +3028,8 @@ function checkSonicTopographyPresetGuard() {
   const fxBindText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '07-fx', '07-bindings-shelf-immersive.js'), 'utf8');
   const fxPanelText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '07-fx', '05-fx-panel-performance.js'), 'utf8');
   const mainLoopText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '11-main-loop.js'), 'utf8');
-  const sonicText = fs.readFileSync(path.join(appRoot, 'public', 'sonic-topography-preset.js'), 'utf8');
-  const sonicWorkshopText = fs.readFileSync(path.join(appRoot, 'public', 'sonic-workshop-preset.js'), 'utf8');
+  const sonicText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '02-visual', '16-sonic-topography-preset.js'), 'utf8');
+  const sonicWorkshopText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '02-visual', '17-sonic-workshop-preset.js'), 'utf8');
   const sonicWorkshopBridgeText = fs.readFileSync(path.join(appRoot, 'public', 'vendor', 'sonic-workshop', 'mineradio-bridge.html'), 'utf8');
   const paletteText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '02-visual', '07-lyrics-palette-text-utils.js'), 'utf8');
   const accentControlText = fs.readFileSync(path.join(appRoot, 'public', 'js', 'modules', '07-fx', '02-accent-background-controls.js'), 'utf8');

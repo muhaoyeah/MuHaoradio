@@ -13,7 +13,7 @@ function read(relativePath) {
 }
 
 const serverText = read('server.js');
-const updateUiText = read('public/js/modules/08-account/00-update-preview.js');
+const updateUiText = read('public/js/modules/08-account/00a-update-preview.js');
 const htmlText = read('public/index.html');
 const packageData = JSON.parse(read('package.json'));
 

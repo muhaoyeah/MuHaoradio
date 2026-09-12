@@ -208,32 +208,38 @@ if (fs.existsSync(svPath)) {
 }
 
 /* ================= D. 约定 ================= */
-head('D. 约定（阶段 2 完成后由 KNOWN 转 FAIL）');
+head('D. 命名约定');
 if (order) {
   const dirs = {};
   order.forEach((rel, i) => {
     const seg = rel.split('/'); const dir = seg.slice(0, -1).join('/'); const file = seg[seg.length - 1];
     const m = file.match(/^(\d+)([a-z]?)/); if (!m) return;
-    (dirs[dir] = dirs[dir] || []).push({ order: i + 1, num: +m[1], file });
+    (dirs[dir] = dirs[dir] || []).push({ order: i + 1, num: +m[1], suf: m[2] || '', file });
   });
+  /* 「NN + 可选小写字母」是合法约定：03 < 03a < 03b < 04。
+     所以前缀比较必须带上字母后缀，只比数字会把 03a/03b 误判成重复前缀。 */
+  const cmpPrefix = (a, b) => (a.num !== b.num ? a.num - b.num : (a.suf < b.suf ? -1 : a.suf > b.suf ? 1 : 0));
   let inv = 0; const invList = [];
   for (const [dir, arr] of Object.entries(dirs)) {
-    let maxN = -1, maxF = '';
+    let maxX = null;
     for (const x of arr) {
-      if (x.num < maxN) { inv++; invList.push(dir + ': ' + x.file + '（前缀 ' + x.num + '）排在前缀 ' + maxN + ' 的 ' + maxF + ' 之后'); }
-      if (x.num > maxN) { maxN = x.num; maxF = x.file; }
+      if (maxX && cmpPrefix(x, maxX) < 0) {
+        inv++;
+        invList.push(dir + ': ' + x.file + '（前缀 ' + x.num + x.suf + '）排在前缀 ' + maxX.num + maxX.suf + ' 的 ' + maxX.file + ' 之后');
+      }
+      if (!maxX || cmpPrefix(x, maxX) > 0) maxX = x;
     }
   }
   if (inv === 0) {
     pass('D1 数字前缀与实际加载顺序一致');
   } else {
-    warn('D1 ' + inv + ' 处前缀倒序（已知存量，阶段 2 修复）');
+    fail('D1 ' + inv + ' 处前缀倒序（文件名前缀必须与实际加载顺序一致）');
     invList.slice(0, 6).forEach(x => info(x));
   }
 
   let dupGroup = 0; const dupList = [];
   for (const [dir, arr] of Object.entries(dirs)) {
-    const g = {}; arr.forEach(x => (g[x.num] = g[x.num] || []).push(x.file));
+    const g = {}; arr.forEach(x => { const k = x.num + x.suf; (g[k] = g[k] || []).push(x.file); });
     for (const [n, f] of Object.entries(g)) if (f.length > 1) { dupGroup++; dupList.push(dir + ' 前缀 ' + n + ' → ' + f.join(' , ')); }
   }
   if (dupGroup === 0) {

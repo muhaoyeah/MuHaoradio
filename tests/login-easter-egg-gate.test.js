@@ -10,7 +10,7 @@ const {
   LOGIN_EASTER_EGG_GATE_VERSION,
   LOGIN_EASTER_EGG_CREDENTIAL_FILES,
 } = require('../desktop/login-easter-egg-gate');
-const { normalizeLoginEasterEggCharacters } = require('../public/js/modules/08-account/00-login-easter-egg');
+const { normalizeLoginEasterEggCharacters } = require('../public/js/modules/08-account/00b-login-easter-egg');
 
 async function run() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mineradio-login-gate-'));
@@ -176,7 +176,7 @@ async function run() {
     assert(html.includes('世界和平！'));
     assert(!/id="login-easter-egg-input"[^>]*maxlength="4"/.test(html), 'IME composition must not be truncated before Chinese text is committed');
 
-    const easterEggRenderer = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'modules', '08-account', '00-login-easter-egg.js'), 'utf8');
+    const easterEggRenderer = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'modules', '08-account', '00b-login-easter-egg.js'), 'utf8');
     assert(easterEggRenderer.includes('playLoginEasterEggUnlockCinematic()'));
     assert(easterEggRenderer.includes('dismissLoginEasterEggCinematic()'));
     assert(easterEggRenderer.includes('showLoginEasterEggAchievement()'));

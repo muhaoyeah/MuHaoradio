@@ -7,7 +7,7 @@ const vm = require('vm');
 
 function createHarness() {
   const source = fs.readFileSync(
-    path.join(__dirname, '..', 'public', 'js', 'modules', '08-account', '00-login-easter-egg.js'),
+    path.join(__dirname, '..', 'public', 'js', 'modules', '08-account', '00b-login-easter-egg.js'),
     'utf8'
   );
   let nextTimerId = 1;
