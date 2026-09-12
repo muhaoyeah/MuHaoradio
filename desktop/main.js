@@ -4624,10 +4624,25 @@ function loginCookieExportMeta(provider) {
   return entries[key] || null;
 }
 
-ipcMain.handle('mineradio-export-login-cookie', async (_event, provider) => {
+ipcMain.handle('mineradio-export-login-cookie', async (event, provider) => {
   try {
+    // 凭证导出是高危操作：① 只允许可信主窗口发起；② 主进程弹原生确认框，用户明确同意才执行。
+    // 渲染层虽已有确认弹窗，但 XSS 可绕过渲染层直接 invoke，必须在主进程兜底。
+    if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER', message: '不可信的调用来源' };
     const meta = loginCookieExportMeta(provider);
     if (!meta) return { ok: false, error: 'UNKNOWN_PROVIDER', message: '未知平台，无法导出登录 cookie' };
+    const owner = getSenderWindow(event);
+    const confirm = await dialog.showMessageBox(owner, {
+      type: 'warning',
+      title: '导出登录凭证',
+      message: `确定把 ${meta.label} 的登录 cookie 导出到桌面吗？`,
+      detail: 'cookie 等于你的登录凭证，任何拿到这个文件的人都能以你的身份登录。仅在需要备份登录态时导出。',
+      buttons: ['取消', '确认导出'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (confirm.response !== 1) return { ok: false, canceled: true, message: '已取消导出' };
     const source = (meta.files || []).filter(Boolean).find((file) => {
       try { return fs.existsSync(file) && fs.statSync(file).isFile() && fs.readFileSync(file, 'utf8').trim(); } catch (_) { return false; }
     });

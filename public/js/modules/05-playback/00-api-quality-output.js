@@ -18,6 +18,23 @@ async function apiJson(url, opts) {
   }
 }
 function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+// 属性上下文专用转义：escHtml（textContent/innerHTML）不转义引号，不能直接放进 "..." 属性值。
+// 任何拼接进属性值（title="..." / value="..." / data-x="..." / src="..."）的用户或上游数据必须走这里。
+function escapeAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+// 图片/媒体 URL 白名单校验：只允许 http(s)，拒绝 javascript:/data: 等协议；非法返回空串
+function safeMediaUrl(u) {
+  try {
+    var url = new URL(String(u || ''), location.href);
+    return /^https?:$/.test(url.protocol) ? url.href : '';
+  } catch (e) { return ''; }
+}
 function normalizePlaybackQuality(value) {
   value = String(value || '').toLowerCase();
   if (value === 'jymaster' || value === 'master' || value === 'svip') return 'jymaster';

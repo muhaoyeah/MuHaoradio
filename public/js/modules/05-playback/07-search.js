@@ -140,7 +140,7 @@ function renderSearchHistory() {
     '<div class="search-history">' +
     '<div class="search-history-head"><span>搜索历史</span><button class="search-history-clear" type="button" data-clear-history="1">清空</button></div>' +
     '<div class="search-history-list">' +
-    items.map(function (q) { return '<button class="search-history-chip" type="button" data-history-query="' + escHtml(q) + '">' + escHtml(q) + '</button>'; }).join('') +
+    items.map(function (q) { return '<button class="search-history-chip" type="button" data-history-query="' + escapeAttr(q) + '">' + escHtml(q) + '</button>'; }).join('') +
     '</div>' +
     '</div>';
   setSearchHistorySurface(true);
@@ -268,8 +268,9 @@ function programMetaText(item) {
   return bits.join('  ·  ');
 }
 function searchThumbHtml(src) {
-  return src
-    ? '<img src="' + coverUrlWithSize(src, 80) + '" alt="" loading="lazy" onerror="this.style.opacity=0.2">'
+  var safe = safeMediaUrl(src && coverUrlWithSize(src, 80));
+  return safe
+    ? '<img src="' + escapeAttr(safe) + '" alt="" loading="lazy" onerror="this.style.opacity=0.2">'
     : '<div style="width:40px;height:40px;border-radius:6px;background:rgba(255,255,255,0.06);flex-shrink:0"></div>';
 }
 function renderPodcastRadios(items, label) {

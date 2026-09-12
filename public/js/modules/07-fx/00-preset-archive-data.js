@@ -1083,8 +1083,8 @@ function renderUserFxArchives() {
     var hasSave = !!slot.snapshot;
     var editing = userFxArchiveEditing === index;
     var nameHtml = editing
-      ? '<input class="user-archive-input" id="user-archive-input-' + index + '" type="text" maxlength="28" value="' + escHtml(slot.name) + '" onkeydown="handleUserFxArchiveRenameKey(event,' + index + ')">'
-      : '<div class="user-archive-name" title="' + escHtml(slot.name) + '">' + escHtml(slot.name) + '</div>';
+      ? '<input class="user-archive-input" id="user-archive-input-' + index + '" type="text" maxlength="28" value="' + escapeAttr(slot.name) + '" onkeydown="handleUserFxArchiveRenameKey(event,' + index + ')">'
+      : '<div class="user-archive-name" title="' + escapeAttr(slot.name) + '">' + escHtml(slot.name) + '</div>';
     var actionsHtml = editing
       ? '<button type="button" onclick="commitUserFxArchiveRename(' + index + ')">确定</button>' +
       '<button type="button" onclick="cancelUserFxArchiveRename()">取消</button>'
