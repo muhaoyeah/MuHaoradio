@@ -93,15 +93,20 @@ test('new home discovery strip is present in the homepage DOM', () => {
   );
 });
 
-test('dashboard selects local discovery candidates and keeps cover swaps stable', () => {
+test('dashboard discovery strip draws only from home discover songs and keeps cover swaps stable', () => {
   const candidateSelector = namedFunctionSource(dashboardScript, 'homeDashboardDiscoverySongs');
   assert.ok(candidateSelector, 'expected homeDashboardDiscoverySongs()');
   assert.match(candidateSelector, /homeDiscoverState\s*&&[\s\S]{0,180}?homeDiscoverState\.songs/);
-  assert.match(candidateSelector, /homeDashboardLocalSongs\s*\(\s*\)/);
+  const candidateCode = candidateSelector.replace(/^\s*\/\/.*$/gm, '');
+  assert.doesNotMatch(
+    candidateCode,
+    /homeDashboardLocalSongs\s*\(|userPlaylists|playQueue/,
+    'discovery strip must not mix local files, 我喜欢 playlists, or queue leftovers',
+  );
   assert.match(
     candidateSelector,
-    /(?:Math\.min\s*\(\s*3\b|\.slice\s*\(\s*0\s*,\s*3\s*\)|picked\.length\s*<\s*3\b)/,
-    'candidate selection should stay bounded to three homepage songs',
+    /(?:Math\.min\s*\(|\.slice\s*\(\s*0\s*,)/,
+    'candidate selection should stay bounded',
   );
 
   const stableCoverUpdate = namedFunctionSource(dashboardScript, 'homeDashboardSetStableBackgroundImage');

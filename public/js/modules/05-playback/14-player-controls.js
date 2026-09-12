@@ -75,7 +75,7 @@ function currentResumeSeconds(fallback) {
 function canRefreshCurrentPlaybackUrlForResume(song) {
   if (!song || song.type === 'local' || song.source === 'local' || song.localUrl) return false;
   var provider = normalizePlaybackProvider(songProviderKey(song));
-  return provider === 'netease' || provider === 'qq' || provider === 'kugou' || provider === 'qishui';
+  return provider === 'netease' || provider === 'qq' || provider === 'kugou' || provider === 'kugou-lite' || provider === 'qishui';
 }
 
 function playbackResumeProvider(song) {
@@ -368,6 +368,7 @@ async function completeAudioPlayStart(opts, reason, expectedMedia, expectedToken
   if (!playbackAttemptStillCurrent(expectedMedia, expectedToken)) return false;
   await ensurePlaybackAudioGraph(reason || 'playback-started');
   if (!playbackAttemptStillCurrent(expectedMedia, expectedToken)) return false;
+  try { if (typeof muhaoBeatDiagOnPlay === 'function') muhaoBeatDiagOnPlay(reason || 'playback-started'); } catch (eDiag) {}
   switchPlaybackVisualToEmily();
   playing = true; setPlayIcon(true);
   if (typeof markStageLyricsPlaybackResume === 'function') markStageLyricsPlaybackResume(reason || 'playback-started');
@@ -426,6 +427,7 @@ async function resumePausedAudioFast(opts) {
     restorePlaybackGain();
     await awaitMediaPlayWithTimeout(media, media.play(), token);
     if (!isSameAudioPlaybackTarget(media, src) || token !== trackSwitchToken) return false;
+    try { if (typeof muhaoBeatDiagOnPlay === 'function') muhaoBeatDiagOnPlay('manual-resume-fast'); } catch (eDiag2) {}
     switchPlaybackVisualToEmily();
     playing = true; setPlayIcon(true);
     if (typeof markStageLyricsPlaybackResume === 'function') {
@@ -740,6 +742,11 @@ function cyclePlayMode() {
   playMode = modes[(idx + 1) % modes.length];
   if (playMode === 'shuffle' && prevMode !== 'shuffle') {
     reorderQueueForShufflePlaybackOrder(currentIdx, { reason: 'play-mode-shuffle' });
+  }
+  if (typeof syncActiveAudioRepeatMode === 'function') syncActiveAudioRepeatMode(audio);
+  if (playMode === 'single' && prevMode !== 'single') {
+    if (typeof clearAlbumGaplessPreload === 'function') clearAlbumGaplessPreload('play-mode-single');
+    if (typeof resetCuefieldAutoMix === 'function') resetCuefieldAutoMix('play-mode-single');
   }
   updatePlayModeButton(true);
   showToast('播放模式: ' + playModeLabel(playMode));

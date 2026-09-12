@@ -21,6 +21,11 @@ function lyricEndpointForSong(songOrId) {
     var qqId = song.qqId || (/^\d+$/.test(String(song.id || '')) ? song.id : '');
     return '/api/qq/lyric?mid=' + encodeURIComponent(mid) + '&id=' + encodeURIComponent(qqId);
   }
+  if (provider === 'kugou-lite') {
+    return '/api/kugou-lite/lyric?hash=' + encodeURIComponent(song.hash || song.fileHash || song.audioHash || song.id || '') +
+      '&albumAudioId=' + encodeURIComponent(song.albumAudioId || song.album_audio_id || song.mixSongId || '') +
+      '&duration=' + encodeURIComponent(playbackDurationFromSong(song) || '');
+  }
   if (provider === 'kugou') {
     return '/api/kugou/lyric?hash=' + encodeURIComponent(song.hash || song.fileHash || song.audioHash || song.id || '') +
       '&albumAudioId=' + encodeURIComponent(song.albumAudioId || song.album_audio_id || song.mixSongId || '') +

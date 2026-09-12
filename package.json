@@ -43,7 +43,10 @@
       "!desktop/wallpaper-preload.js",
       "!public/wallpaper.html",
       "!public/index.*.html",
-      "public/index.html"
+      "public/index.html",
+      "vendor/KuGouMusicApi/**/*",
+      "vendor/KuGouMusicApi/node_modules/**/*",
+      "desktop/kugou-lite-runtime.js"
     ],
     "asar": false,
     "win": {

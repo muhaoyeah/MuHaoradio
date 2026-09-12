@@ -1,60 +1,93 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Mineradio</title>
+  <title>MuHao Radio</title>
   <style>
     :root { color-scheme: dark; }
     * { box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
     body {
-      display: grid;
-      place-items: center;
-      color: rgba(255,255,255,.92);
-      background:
-        radial-gradient(circle at 50% 42%, rgba(255,255,255,.085), transparent 31%),
-        rgba(4,5,7,.96);
-      font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+      user-select: none;
+      cursor: default;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .startup-shell-mark {
+      position: relative;
+      z-index: 2;
+      font-family: "Inter", "Noto Sans SC", system-ui, sans-serif;
+      font-size: clamp(28px, 5vw, 48px);
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: #fff;
+      opacity: 0.4;
+      pointer-events: none;
       user-select: none;
     }
-    .boot { display: grid; justify-items: center; gap: 15px; transform: translateY(-2vh); }
-    .mark {
-      width: 54px;
-      height: 54px;
-      display: grid;
-      place-items: center;
-      border: 1px solid rgba(255,255,255,.22);
-      border-radius: 17px;
-      background: linear-gradient(145deg, rgba(255,255,255,.16), rgba(255,255,255,.035));
-      box-shadow: 0 18px 52px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.17);
-      font-weight: 760;
-      letter-spacing: -.08em;
+    .startup-warm-slit {
+      position: absolute;
+      inset: -25%;
+      z-index: 1;
+      pointer-events: none;
+      overflow: hidden;
     }
-    .name { font-size: 18px; font-weight: 650; letter-spacing: .02em; }
-    .status { color: rgba(255,255,255,.48); font-size: 12px; letter-spacing: .08em; }
-    .dots { display: flex; gap: 7px; height: 8px; }
-    .dots i {
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: rgba(255,255,255,.7);
-      animation: pulse 1.05s ease-in-out infinite;
+    .startup-warm-slit::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 140vmax;
+      height: 1.4px;
+      margin-left: -70vmax;
+      margin-top: -0.7px;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0) 28%,
+        rgba(255, 255, 255, 0.05) 42%,
+        rgba(255, 255, 255, 0.16) 50%,
+        rgba(244, 210, 138, 0.07) 57%,
+        rgba(255, 255, 255, 0) 70%,
+        transparent 100%);
+      box-shadow:
+        0 0 10px 1px rgba(255, 255, 255, 0.06),
+        0 0 28px 6px rgba(244, 210, 138, 0.03);
+      transform: rotate(-34deg) translate3d(0, 0, 0);
+      opacity: 0.35;
+      animation: startup-warm-slit-breathe 7.5s ease-in-out infinite;
+      will-change: opacity, transform;
     }
-    .dots i:nth-child(2) { animation-delay: .14s; }
-    .dots i:nth-child(3) { animation-delay: .28s; }
-    @keyframes pulse {
-      0%, 70%, 100% { opacity: .2; transform: translateY(0); }
-      35% { opacity: 1; transform: translateY(-3px); }
+    @keyframes startup-warm-slit-breathe {
+      0%, 100% {
+        opacity: 0.22;
+        transform: rotate(-34deg) translate3d(-2%, 1.5%, 0);
+      }
+      50% {
+        opacity: 0.55;
+        transform: rotate(-34deg) translate3d(2%, -1.5%, 0);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .startup-warm-slit::before {
+        animation: none;
+        opacity: 0.32;
+        transform: rotate(-34deg);
+      }
     }
   </style>
 </head>
 <body>
-  <main class="boot" role="status" aria-live="polite">
-    <div class="mark">MR</div>
-    <div class="name">Mineradio</div>
-    <div class="status">正在启动播放器</div>
-    <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
-  </main>
+  <!-- MuHao outer shell layer-1 darkroom warm-up: black + MuHao@0.4 + weak slit breathe. No loading copy. -->
+  <div class="startup-warm-slit" aria-hidden="true"></div>
+  <div class="startup-shell-mark" aria-hidden="true">MuHao</div>
 </body>
 </html>

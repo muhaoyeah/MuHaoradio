@@ -172,6 +172,42 @@ var mainFrameGates = {
   desktopOverlay: createFrameGate('main.desktopOverlay', 12)
 };
 window.__mineradioMainFrameGates = mainFrameGates;
+// ============================================================
+// MuHao: isolate per-stage runtime errors inside the rAF main loop.
+// A single throwing analyser (e.g. realtime beat engine / beatmap / sonic
+// monitor) used to abort animate() before smoothBass/bass were published and
+// before renderer.render(), freezing the canvas with bass/beatPulse stuck at 0
+// while audio kept playing. Each risky stage now runs through muhaoSafeStage so
+// the envelopes and the frame always finish; the first error is reported to the
+// beat diag log (throttled) for root-cause confirmation.
+var muhaoMainLoopStageErrLast = Object.create(null);
+function muhaoSafeStage(stage, fn) {
+  try {
+    return fn();
+  } catch (err) {
+    try {
+      var nowMs = performance.now();
+      var lastAt = muhaoMainLoopStageErrLast[stage] || 0;
+      if (nowMs - lastAt > 1500) {
+        muhaoMainLoopStageErrLast[stage] = nowMs;
+        var payload = {
+          kind: 'mainloop-stage-error',
+          stage: String(stage),
+          name: err && err.name ? err.name : '',
+          message: err && (err.message || String(err)),
+          stack: err && err.stack ? String(err.stack).slice(0, 700) : '',
+          at: new Date().toISOString()
+        };
+        if (typeof muhaoBeatDiagAppendLine === 'function') {
+          muhaoBeatDiagAppendLine(JSON.stringify(payload));
+        } else {
+          console.warn('[MuHaoStageError]', stage, err);
+        }
+      }
+    } catch (reportErr) { }
+    return undefined;
+  }
+}
 var mainLoopBackgroundTimer = 0;
 var mainLoopAnimationRequested = false;
 function mainLoopDeepBackgroundSleeping() {
@@ -293,6 +329,121 @@ function targetMainDesktopOverlayFps(now) {
   }
   return 6;
 }
+
+// Compact audio keep-alive used when adaptive render skips a visual frame.
+// Full analysis still runs on rendered frames; this prevents bass/beatPulse freeze.
+var mainAudioKeepAliveLastAt = 0;
+function keepAliveMainLoopAudioOnSkip(now, dt) {
+  // Separate throttle from mainFrameGates.audio so skipped frames never starve
+  // the full-path beat-map / cinema analysis on the next rendered frame.
+  var targetFps = targetMainAudioFps(now);
+  var minGap = 1000 / Math.max(24, targetFps || 48);
+  if (mainAudioKeepAliveLastAt && now - mainAudioKeepAliveLastAt < minGap) return;
+  mainAudioKeepAliveLastAt = now;
+  var audioStepDt = Math.max(0.008, Math.min(0.05, dt || 0.016));
+  beatOnsetFlag = false;
+  if (!(analyser && playing && audio && !audio.paused)) {
+    var audioIdleDecay = Math.max(1, audioStepDt * 60);
+    smoothBass *= Math.pow(0.91, audioIdleDecay);
+    smoothMid *= Math.pow(0.91, audioIdleDecay);
+    smoothTreb *= Math.pow(0.91, audioIdleDecay);
+    smoothEnergy *= Math.pow(0.91, audioIdleDecay);
+    beatPulse *= Math.pow(0.82, audioIdleDecay);
+  } else {
+    if (audioCtx && audioCtx.state === 'suspended' && typeof resumeAudioAnalysis === 'function') resumeAudioAnalysis();
+    analyser.getByteFrequencyData(frequencyData);
+    analyser.getByteTimeDomainData(timeDomainData);
+    var analysisSampleRate = (audioCtx && audioCtx.sampleRate) || 44100;
+    var analysisFftSize = (analyser && analyser.fftSize) || (frequencyData.length * 2);
+    var bKick = 0, mInst = 0, tHigh = 0, rms = 0, rmsCount = 0;
+    var timeStride = (typeof runtimeAnalysisStride === 'function') ? runtimeAnalysisStride('time', timeDomainData.length) : 1;
+    for (var j = 0; j < timeDomainData.length; j += timeStride) {
+      var tv = (timeDomainData[j] - 128) / 128;
+      rms += tv * tv;
+      rmsCount++;
+    }
+    rms = Math.sqrt(rms / Math.max(1, rmsCount));
+    if (typeof beatBandRms === 'function') {
+      var subKick = beatBandRms(frequencyData, analysisSampleRate, analysisFftSize, 38, 74);
+      var kickCore = beatBandRms(frequencyData, analysisSampleRate, analysisFftSize, 52, 165);
+      var kickBody = beatBandRms(frequencyData, analysisSampleRate, analysisFftSize, 165, 420);
+      bKick = Math.min(1, kickCore * 0.86 + subKick * 0.42 + kickBody * 0.10);
+      mInst = beatBandRms(frequencyData, analysisSampleRate, analysisFftSize, 2600, 6200);
+      tHigh = beatBandRms(frequencyData, analysisSampleRate, analysisFftSize, 6200, Math.min(16000, analysisSampleRate / 2));
+    }
+    bassPeak = Math.max(bassPeak * 0.994, bKick, 0.030);
+    midPeak = Math.max(midPeak * 0.993, mInst, 0.026);
+    treblePeak = Math.max(treblePeak * 0.992, tHigh, 0.018);
+    energyPeak = Math.max(energyPeak * 0.995, rms, 0.030);
+    var rb = Math.min(1, Math.pow(bKick / Math.max(0.038, bassPeak * 0.66), 0.78));
+    var rm = Math.min(1, Math.pow(mInst / Math.max(0.025, midPeak * 0.70), 0.86));
+    var rt = Math.min(1, Math.pow(tHigh / Math.max(0.020, treblePeak * 0.74), 0.92));
+    var re = Math.min(1, Math.pow(rms / Math.max(0.034, energyPeak * 0.68), 0.82));
+    var bassOnset = Math.max(0, rb - smoothBass);
+    var energyOnset = Math.max(0, re - prevEnergy);
+    prevEnergy = prevEnergy * 0.88 + re * 0.12;
+    function envKeep(prev, next, attack, release) {
+      var k = next > prev ? attack : release;
+      return prev + (next - prev) * k;
+    }
+    // Broadband energy must drive bass: kick-only envelope freezes ballads at bass=0 under preset>=4 floor.
+    smoothBass = envKeep(smoothBass, Math.min(0.82, rb * 0.70 + re * 0.22 + rm * 0.06), 0.30, 0.075);
+    smoothMid = envKeep(smoothMid, Math.min(0.68, rm * 0.64 + re * 0.05), 0.18, 0.060);
+    smoothTreb = envKeep(smoothTreb, Math.min(0.56, rt * 0.54), 0.18, 0.055);
+    smoothEnergy = envKeep(smoothEnergy, Math.min(0.72, re), 0.16, 0.055);
+    var realtimeBeat = (typeof processRealtimeBeatEngine === 'function')
+      ? muhaoSafeStage('skip-realtime-beat-engine', function () { return processRealtimeBeatEngine(audioStepDt); })
+      : null;
+    if (realtimeBeat && realtimeBeat.hit) {
+      var rtPulse = Math.min(0.70, (realtimeBeat.strength || 0) * 0.80);
+      if (rtPulse > beatPulse + 0.09) beatOnsetFlag = true;
+      beatPulse = Math.max(beatPulse, rtPulse);
+    } else if (bassOnset > 0.055 && rb > 0.24 && energyOnset > 0.012) {
+      beatPulse = Math.max(beatPulse, Math.min(0.16, bassOnset * 0.22 + energyOnset * 0.35));
+    } else if (re > 0.16 && energyOnset > 0.008) {
+      // Soft/mid-heavy tracks (e.g. ballads): keep a low continuous pulse from energy flux.
+      beatPulse = Math.max(beatPulse, Math.min(0.18, (re - 0.12) * 0.45 + energyOnset * 0.55));
+    }
+    beatPulse *= Math.pow(0.36, audioStepDt);
+    if (scheduledBeatPulse > beatPulse) beatPulse = scheduledBeatPulse;
+    scheduledBeatPulse *= Math.pow(0.32, audioStepDt);
+    if (typeof stepSonicAudioMonitor === 'function') {
+      muhaoSafeStage('skip-sonic-monitor', function () {
+        stepSonicAudioMonitor(frequencyData, audioStepDt, {
+          fx: fx,
+          playing: true,
+          beat: beatPulse,
+          sampleRate: analysisSampleRate,
+          fftSize: analysisFftSize,
+          currentTime: audio.currentTime || 0
+        });
+      });
+    }
+  }
+  // Publish envelopes so skipped visual frames still leave live uniforms for the next draw.
+  audioEnergy = Math.max(smoothEnergy, beatPulse * 0.30);
+  var intensity = (fx && fx.intensity != null) ? fx.intensity : 1;
+  bass = Math.min(0.90, smoothBass * 1.05 + beatPulse * 0.18) * intensity;
+  mid = Math.min(0.72, smoothMid * 1.12) * intensity;
+  treble = Math.min(0.62, smoothTreb * 1.20) * intensity;
+  if (fx && fx.preset >= 4) {
+    var wallpaperAudio = fx.preset === 5;
+    var ringBass = smoothBass * (wallpaperAudio ? 1.10 : 1.58) + beatPulse * (wallpaperAudio ? 0.18 : 0.42) + smoothEnergy * 0.18 - smoothMid * 0.10 - smoothTreb * 0.04;
+    bass = Math.pow(Math.max(0, Math.min(1, (ringBass - 0.018) / 0.58)), 0.72) * intensity;
+    if (wallpaperAudio) {
+      bass = Math.min(bass, 0.46 * intensity);
+      beatPulse *= 0.34;
+    }
+  }
+  if (typeof uniforms !== 'undefined' && uniforms) {
+    if (uniforms.uBass) uniforms.uBass.value = bass;
+    if (uniforms.uMid) uniforms.uMid.value = mid;
+    if (uniforms.uTreble) uniforms.uTreble.value = treble;
+    if (uniforms.uBeat) uniforms.uBeat.value = beatPulse;
+    if (uniforms.uEnergy) uniforms.uEnergy.value = audioEnergy;
+  }
+}
+
 function animate() {
   mainLoopAnimationRequested = false;
   scheduleNextMainLoopFrame();
@@ -305,9 +456,16 @@ function animate() {
     tickDeepBackgroundFrame(now, deepDt);
     return;
   }
-  if (shouldSkipAdaptiveRenderFrame(now)) return;
+  // Keep beat/bass envelopes alive even when adaptive cadence skips the visual frame.
+  // Otherwise analyserSignal can rise while bass/beatPulse stay frozen at 0.
+  var skipRender = shouldSkipAdaptiveRenderFrame(now);
   var dt = Math.min((now - prevTime) / 1000, 0.05);
   prevTime = now;
+  if (skipRender) {
+    sampleRenderPerf(now, dt);
+    keepAliveMainLoopAudioOnSkip(now, dt);
+    return;
+  }
   sampleRenderPerf(now, dt);
   uniforms.uTime.value += dt;
   if (isMainSceneCoveredBySplash()) {
@@ -405,7 +563,7 @@ function animate() {
     var energyOnset = Math.max(0, re - prevEnergy);
     prevEnergy = prevEnergy * 0.88 + re * 0.12;
 
-    var realtimeBeat = processRealtimeBeatEngine(audioStepDt);
+    var realtimeBeat = muhaoSafeStage('realtime-beat-engine', function () { return processRealtimeBeatEngine(audioStepDt); });
     if (realtimeBeat && realtimeBeat.hit) {
       var dj = djMode.active;
       var djMapCoversCurrentTime = !dj || !currentDjBeatMap || !currentDjBeatMap.partialUntilSec || !audio || (audio.currentTime || 0) <= currentDjBeatMap.partialUntilSec - 1.25;
@@ -449,14 +607,17 @@ function animate() {
         if (rtPulse > beatPulse + 0.09) beatOnsetFlag = true;
         beatPulse = Math.max(beatPulse, rtPulse);
       }
-    } else if (bassOnset > 0.075 && rb > 0.32 && energyOnset > 0.020) {
-      beatPulse = Math.max(beatPulse, Math.min(0.12, bassOnset * 0.18));
+    } else if (bassOnset > 0.055 && rb > 0.24 && energyOnset > 0.012) {
+      beatPulse = Math.max(beatPulse, Math.min(0.16, bassOnset * 0.22 + energyOnset * 0.35));
+    } else if (re > 0.16 && energyOnset > 0.008) {
+      // Ballad / mid-heavy: analyserSignal can be healthy while kick bins stay soft.
+      beatPulse = Math.max(beatPulse, Math.min(0.18, (re - 0.12) * 0.45 + energyOnset * 0.55));
     }
     beatPulse *= Math.pow(0.36, audioStepDt);
 
     // v7.2+: 预解析 beatmap 只在实时引擎暂时没锁住时补位.
-    tickPodcastDjBeatMap();
-    tickBeatMap();
+    muhaoSafeStage('podcast-dj-beatmap', function () { tickPodcastDjBeatMap(); });
+    muhaoSafeStage('beatmap', function () { tickBeatMap(); });
     if (scheduledBeatFlag) {
       beatOnsetFlag = true;
       scheduledBeatFlag = false;
@@ -465,13 +626,15 @@ function animate() {
     if (scheduledBeatPulse > beatPulse) beatPulse = scheduledBeatPulse;
     scheduledBeatPulse *= Math.pow(0.32, audioStepDt);
     if (typeof stepSonicAudioMonitor === 'function') {
-      var sonicMonitorFrame = stepSonicAudioMonitor(frequencyData, audioStepDt, {
-        fx: fx,
-        playing: true,
-        beat: beatPulse,
-        sampleRate: analysisSampleRate,
-        fftSize: analysisFftSize,
-        currentTime: audio.currentTime || 0
+      var sonicMonitorFrame = muhaoSafeStage('sonic-monitor', function () {
+        return stepSonicAudioMonitor(frequencyData, audioStepDt, {
+          fx: fx,
+          playing: true,
+          beat: beatPulse,
+          sampleRate: analysisSampleRate,
+          fftSize: analysisFftSize,
+          currentTime: audio.currentTime || 0
+        });
       });
       if (fx && fx.sonicAudioMonitorEnabled !== false) sonicAudioFrame = sonicMonitorFrame;
     }
@@ -481,9 +644,9 @@ function animate() {
       return prev + (next - prev) * k;
     }
     // smoothBass 主要由 kick 驱动 (不被人声干扰)
-    smoothBass = env(smoothBass, Math.min(0.82, rb * 0.78 + re * 0.025), 0.28, 0.075);
-    // smoothMid 用 中高乐器, 不再混入人声
-    smoothMid = env(smoothMid, Math.min(0.68, rm * 0.64 + re * 0.025), 0.18, 0.060);
+    smoothBass = env(smoothBass, Math.min(0.82, rb * 0.70 + re * 0.22 + rm * 0.06), 0.30, 0.075);
+    // mid retains instrument focus but borrows a little broadband energy for soft tracks
+    smoothMid = env(smoothMid, Math.min(0.68, rm * 0.64 + re * 0.05), 0.18, 0.060);
     smoothTreb = env(smoothTreb, Math.min(0.56, rt * 0.54), 0.18, 0.055);
     smoothEnergy = env(smoothEnergy, Math.min(0.72, re), 0.16, 0.055);
     var cinemaProfileSample = { energy: re, low: rb, vocal: voc, melody: rm, lowOnset: bassOnset, energyOnset: energyOnset };
@@ -501,8 +664,10 @@ function animate() {
       cinemaProfileSample.lowOnset = Math.max(cinemaProfileSample.lowOnset, sonicLowOnset);
       cinemaProfileSample.energyOnset = Math.max(cinemaProfileSample.energyOnset, sonicLowOnset * 0.62);
     }
-    updateCinemaDynamics(Math.max(re, cinemaProfileSample.energy * 0.92), Math.max(rb, cinemaProfileSample.low * 0.90));
-    updateCinemaTrackProfile(cinemaProfileSample);
+    muhaoSafeStage('cinema-dynamics', function () {
+      updateCinemaDynamics(Math.max(re, cinemaProfileSample.energy * 0.92), Math.max(rb, cinemaProfileSample.low * 0.90));
+      updateCinemaTrackProfile(cinemaProfileSample);
+    });
     // 歌词阳光溢光: 独立于律动强度, 看持续能量 + 中高频抬升, 更像副歌/高音段落而不是单个鼓点.
     var sunEnergy = clamp01((smoothEnergy - 0.18) / 0.38);
     var sunVoice = clamp01((voc - 0.11) / 0.34);
@@ -539,10 +704,11 @@ function animate() {
   treble = Math.min(0.62, smoothTreb * 1.20) * fx.intensity;
   if (fx.preset >= 4) {
     var wallpaperAudio = fx.preset === 5;
-    var ringBass = smoothBass * (wallpaperAudio ? 1.10 : 1.58) + beatPulse * (wallpaperAudio ? 0.18 : 0.42) - smoothMid * 0.16 - smoothTreb * 0.06;
+    var ringBass = smoothBass * (wallpaperAudio ? 1.10 : 1.58) + beatPulse * (wallpaperAudio ? 0.18 : 0.42) + smoothEnergy * 0.18 - smoothMid * 0.10 - smoothTreb * 0.04;
     var ringMid = smoothMid * (wallpaperAudio ? 1.16 : 1.82) - smoothBass * 0.14 - smoothTreb * 0.07;
     var ringTreble = smoothTreb * (wallpaperAudio ? 1.34 : 2.28) - smoothMid * 0.10 - smoothBass * 0.05;
-    bass = Math.pow(clamp01((ringBass - 0.050) / 0.58), 0.72) * fx.intensity;
+    // Floor was 0.050 and kick-only smoothBass often sat ~0.025 -> bass stuck at 0 despite live analyserSignal.
+    bass = Math.pow(clamp01((ringBass - 0.018) / 0.58), 0.72) * fx.intensity;
     mid = Math.pow(clamp01((ringMid - 0.045) / 0.46), 0.78) * fx.intensity;
     treble = Math.pow(clamp01((ringTreble - 0.030) / 0.34), 0.84) * fx.intensity;
     if (wallpaperAudio) {

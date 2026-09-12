@@ -28,6 +28,10 @@ function loginEasterEggBrowserPreviewUnlocked() {
 }
 
 async function ensureLoginEasterEggStatus(force) {
+  // MUHAO_FORCE_UNLOCK: skip world-peace gate so frameless window is usable
+  loginEasterEggState.ready = true;
+  loginEasterEggState.unlocked = true;
+  return true;
   if (!force && loginEasterEggState.ready) return loginEasterEggState.unlocked;
   if (!force && loginEasterEggStatusPromise) return loginEasterEggStatusPromise;
   loginEasterEggStatusPromise = (async function () {

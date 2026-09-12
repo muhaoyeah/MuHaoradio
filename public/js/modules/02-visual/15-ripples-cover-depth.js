@@ -3,7 +3,7 @@ var rippleIdx = 0;
 var lastRippleAt = 0;
 var lastBassRising = false;
 var rippleActiveCount = 0;
-var BASS_THRESHOLD = 0.30;
+var BASS_THRESHOLD = 0.16;
 var RIPPLE_COOLDOWN = 0.32;
 
 var regions = [];
@@ -21,15 +21,24 @@ function triggerRipple(x, y, strength) {
 }
 
 function updateRipples(dt) {
+  // Couple sustained bass AND realtime/scheduled beat onset into cover ripples.
+  // Previously only bass>threshold fired ripples; soft analyser bass + strong beatPulse
+  // left emily cover looking static while audio played.
   var isBassHit = bass > BASS_THRESHOLD && !lastBassRising;
-  lastBassRising = bass > BASS_THRESHOLD * 0.75;
+  var isBeatHit = false;
+  try {
+    isBeatHit = !!(typeof beatOnsetFlag !== 'undefined' && beatOnsetFlag) ||
+      (typeof beatPulse !== 'undefined' && beatPulse > 0.16 && bass > 0.06);
+  } catch (eBeat) { isBeatHit = false; }
+  var isHit = isBassHit || isBeatHit;
+  lastBassRising = bass > BASS_THRESHOLD * 0.75 || (typeof beatPulse !== 'undefined' && beatPulse > 0.22);
   var now = uniforms.uTime.value;
   var hadActive = rippleActiveCount > 0;
-  if (!hadActive && !isBassHit) {
+  if (!hadActive && !isHit) {
     if (uniforms.uRippleCount.value !== 0) uniforms.uRippleCount.value = 0;
     return;
   }
-  if (isBassHit && (now - lastRippleAt) > RIPPLE_COOLDOWN) {
+  if (isHit && (now - lastRippleAt) > RIPPLE_COOLDOWN) {
     lastRippleAt = now;
     var count = 2 + (Math.random() < 0.5 ? 0 : 1);
     var used = {};
@@ -40,7 +49,8 @@ function updateRipples(dt) {
       var reg = regions[idx];
       var jx = reg.x + (Math.random() - 0.5) * 0.7;
       var jy = reg.y + (Math.random() - 0.5) * 0.7;
-      var str = 0.65 + bass * 1.4 + Math.random() * 0.25;
+      var beatBoost = (typeof beatPulse !== 'undefined' ? beatPulse : 0);
+      var str = 0.65 + bass * 1.4 + beatBoost * 0.55 + Math.random() * 0.25;
       triggerRipple(jx, jy, str);
     }
   }
@@ -60,7 +70,7 @@ function updateRipples(dt) {
   var active = 0;
   for (var i = 0; i < RIPPLE_MAX; i++) if (ripples[i].str > 0.005) active++;
   rippleActiveCount = active;
-  if (active || hadActive || isBassHit) rippleTex.needsUpdate = true;
+  if (active || hadActive || isHit) rippleTex.needsUpdate = true;
   uniforms.uRippleCount.value = active;
 }
 

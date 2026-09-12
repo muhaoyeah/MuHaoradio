@@ -106,6 +106,8 @@ function runLoginGuideParticles(done) {
   loginGuideRaf = requestAnimationFrame(draw);
 }
 function maybeRunStartupLoginGuide(source) {
+  // MUHAO_SKIP_STARTUP_LOGIN_GUIDE: avoid auto login wall on first enter
+  return;
   if (startupLoginGuideShown || loginGuideAnimating) return;
   if (typeof loginEasterEggAllowsStartupGuide === 'function' && !loginEasterEggAllowsStartupGuide()) return;
   if (visualGuideActive) return;

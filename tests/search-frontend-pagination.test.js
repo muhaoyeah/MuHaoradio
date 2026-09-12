@@ -186,6 +186,9 @@ test('ranking favors exact originals while preserving explicitly requested versi
     'sourceSwitchArtistParts',
     'searchPopularityScore',
     'searchCanonicalSongKey',
+    'songProviderKey',
+    'kugouLiteIsActiveAccount',
+    'kugouLiteSessionLoggedIn',
     'scoreSongSearchResult',
   ];
   const sandbox = {};

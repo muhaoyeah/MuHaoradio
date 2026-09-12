@@ -29,6 +29,7 @@ var homePlatformRecommendationState = {
   feeds: {
     qishui: { loading: false, loaded: false, songs: [], error: '', message: '', mode: '', source: '', fallback: false, provenance: '' },
     kugou: { loading: false, loaded: false, songs: [], error: '', message: '', mode: '', source: '', fallback: false, provenance: '' },
+    'kugou-lite': { loading: false, loaded: false, songs: [], error: '', message: '', mode: '', source: '', fallback: false, provenance: '' },
     spotify: { loading: false, loaded: false, songs: [], error: '', message: '', mode: '', source: '', fallback: false, provenance: '' },
   },
 };
@@ -553,7 +554,7 @@ function renderHomeDashboardQuickCards() {
     {
       label: 'CONTINUE',
       title: continueItem && (continueItem.name || continueItem.title) || '开始听歌',
-      sub: continueItem ? (homeDashboardSubtitle(continueItem) || recent && (recent.artist || recent.source) || '继续当前队列') : '从音乐库或每日推荐开始',
+      sub: continueItem ? (homeDashboardSubtitle(continueItem) || recent && (recent.artist || recent.source) || '继续当前队列') : '从音乐库或猜你喜欢开始',
       cover: homeDashboardSongCover(current, 360) || recent && recent.cover || '',
       action: 'resumeHomeDashboardPlayback()',
       tone: 'search',
@@ -569,11 +570,13 @@ function renderHomeDashboardQuickCards() {
       className: 'home-card-quick',
     },
     {
-      label: 'DAILY MIX',
-      title: '每日推荐',
-      sub: daily ? ((daily.name || daily.title || '今日歌曲') + (homeDashboardSubtitle(daily) ? ' · ' + homeDashboardSubtitle(daily) : '')) : '使用当前 Mineradio 推荐数据',
+      label: (homeDiscoverState && homeDiscoverState.source === 'kugou-lite') || (typeof hasPlatformLogin === 'function' && hasPlatformLogin('kugou-lite')) || (typeof kugouLiteLoginStatus !== 'undefined' && kugouLiteLoginStatus && kugouLiteLoginStatus.loggedIn) ? 'GUESS LIKE' : 'DAILY MIX',
+      title: (homeDiscoverState && homeDiscoverState.source === 'kugou-lite') || (typeof hasPlatformLogin === 'function' && hasPlatformLogin('kugou-lite')) || (typeof kugouLiteLoginStatus !== 'undefined' && kugouLiteLoginStatus && kugouLiteLoginStatus.loggedIn) ? '猜你喜欢' : '每日推荐',
+      sub: ((homeDiscoverState && homeDiscoverState.source === 'kugou-lite') || (typeof hasPlatformLogin === 'function' && hasPlatformLogin('kugou-lite')) || (typeof kugouLiteLoginStatus !== 'undefined' && kugouLiteLoginStatus && kugouLiteLoginStatus.loggedIn))
+        ? (daily ? ((daily.name || daily.title || '品味推荐') + (homeDashboardSubtitle(daily) ? ' · ' + homeDashboardSubtitle(daily) : '') + ' · 猜你喜欢') : '酷狗概念版 · 根据听歌品味/习惯')
+        : (daily ? ((daily.name || daily.title || '今日歌曲') + (homeDashboardSubtitle(daily) ? ' · ' + homeDashboardSubtitle(daily) : '')) : '使用当前 Mineradio 推荐数据'),
       cover: homeDashboardSongCover(daily, 260),
-      action: 'playHomeDaily()',
+      action: 'openHomeGuessLikeEntry()',
       tone: 'mix',
       className: 'home-card-quick',
     },
@@ -721,27 +724,10 @@ function homeDashboardDiscoverySongs() {
     });
   }
 
+  // Home discovery strip is ONLY 猜你喜欢 / homeDiscover songs.
+  // Never mix userPlaylists (我喜欢), shelf playlist, playQueue leftovers, or local files.
   addSongs(homeDiscoverState && homeDiscoverState.songs);
-  addSongs(playQueue);
-  if (Array.isArray(userPlaylists)) {
-    userPlaylists.forEach(function (item) { addSongs(item && item.songs); });
-  }
-  addSongs(playlist);
-  addSongs(homeDashboardLocalSongs());
-
-  if (candidates.length <= 3) return candidates.slice();
-  var day = homeDashboardDayNumber();
-  var step = Math.max(1, Math.floor(candidates.length / 3));
-  var picked = [];
-  var pickedKeys = Object.create(null);
-  for (var index = 0; index < candidates.length && picked.length < 3; index += 1) {
-    var candidate = candidates[(day * 17 + index * step + index * 7) % candidates.length];
-    var candidateKey = homeDashboardSongKey(candidate);
-    if (!candidateKey || pickedKeys[candidateKey]) continue;
-    pickedKeys[candidateKey] = true;
-    picked.push(candidate);
-  }
-  return picked;
+  return candidates.slice(0, Math.min(12, candidates.length));
 }
 
 function renderHomeDashboardDiscovery() {
@@ -756,8 +742,8 @@ function renderHomeDashboardDiscovery() {
   homeDashboardDiscoveryFingerprint = fingerprint;
   root.classList.toggle('is-empty', !homeDashboardDiscoveryCache.length);
   if (!homeDashboardDiscoveryCache.length) {
-    root.innerHTML = '<button class="home-discovery-empty" type="button" onclick="openHomeDashboardLibrary()">' +
-      '<strong>等待你的音乐</strong><span>登录平台或导入本地音乐后生成推荐</span></button>';
+    root.innerHTML = '<button class="home-discovery-empty" type="button" onclick="openHomeGuessLikeEntry()">' +
+      '<strong>打开猜你喜欢</strong><span>根据听歌品味，不是我喜欢</span></button>';
     return;
   }
   root.innerHTML = homeDashboardDiscoveryCache.map(function (song, index) {
@@ -773,7 +759,19 @@ function renderHomeDashboardDiscovery() {
 function playHomeDashboardDiscoverySong(index) {
   if (!homeDashboardDiscoveryCache.length) homeDashboardDiscoveryCache = homeDashboardDiscoverySongs();
   if (!homeDashboardDiscoveryCache.length) {
-    openHomeDashboardLibrary();
+    var liteOn = false;
+    try {
+      if (typeof isKugouLiteHomeRecommendActive === 'function') liteOn = !!isKugouLiteHomeRecommendActive();
+      if (!liteOn && typeof hasPlatformLogin === 'function') liteOn = !!hasPlatformLogin('kugou-lite');
+    } catch (_e) {}
+    if (typeof openHomeGuessLikeEntry === 'function') {
+      openHomeGuessLikeEntry();
+      return;
+    }
+    if (liteOn && typeof openHomePlatformRecommendations === 'function') {
+      openHomePlatformRecommendations('kugou-lite');
+      return;
+    }
     return;
   }
   playQueue = homeDashboardDiscoveryCache.map(function (song) { return cloneSong(song); });
@@ -868,6 +866,7 @@ function homePlatformRecommendationSourceLabel(source) {
     qishui: '汽水',
     qq: 'QQ 音乐',
     kugou: '酷狗音乐',
+    'kugou-lite': '酷狗概念版',
     spotify: 'Spotify',
   }[source] || '当前平台';
 }
@@ -887,6 +886,13 @@ function homePlatformRecommendationFeedConfig(source) {
       cardLabel: '酷狗推荐 FM',
       readyText: '来自酷狗 FM 推荐',
       playlistName: '酷狗推荐 FM',
+    },
+    'kugou-lite': {
+      endpoint: '/api/kugou-lite/recommendations?limit=12',
+      sectionTitle: '猜你喜欢',
+      cardLabel: '酷狗概念版猜你喜欢',
+      readyText: '已同步酷狗概念版猜你喜欢',
+      playlistName: '猜你喜欢',
     },
     spotify: {
       endpoint: '/api/spotify/recommendations?limit=12',
@@ -1076,6 +1082,10 @@ function renderHomePlatformRecommendations() {
         readyText = '来自 Spotify Web API 的个人常听';
       }
       status.textContent = readyText;
+      try {
+        var _hint = feedState.message || feedState.provenance || '';
+        if (_hint) status.textContent = readyText + ' · ' + _hint;
+      } catch (_dbgErr) {}
       list.innerHTML = '<section><h3>' + escHtml(sectionTitle) + '</h3><div class="home-platform-recommend-grid">' + feedState.songs.map(function (item, index) {
         return homePlatformRecommendationCard(source + '-song', index, item, cardLabel);
       }).join('') + '</div></section>';
@@ -1138,9 +1148,15 @@ async function loadHomePlatformFeedRecommendations(source, force) {
     feedState.message = data && data.message ? String(data.message) : '';
     feedState.mode = data && data.mode ? String(data.mode) : '';
     feedState.source = data && data.source ? String(data.source) : '';
+    feedState.message = data && data.message ? String(data.message) : (feedState.message || '');
     feedState.fallback = !!(data && data.fallback);
     feedState.provenance = data && data.provenance ? String(data.provenance) : '';
+    feedState.excludeLiked = !!(data && data.excludeLiked);
+    feedState.filteredLikedCount = data && data.filteredLikedCount ? Number(data.filteredLikedCount) : 0;
     feedState.loaded = true;
+    try {
+      if (typeof syncLikeStatusForSongs === 'function') syncLikeStatusForSongs(feedState.songs);
+    } catch (_likeSyncErr) {}
   } catch (error) {
     console.warn('[HomePlatformFeed:' + source + ']', error);
     feedState.songs = [];
@@ -1222,7 +1238,7 @@ function bindHomePlatformRecommendationControls() {
     closeHomePlatformRecommendations();
     if (kind === 'netease-playlist' && typeof openHomePlaylist === 'function') openHomePlaylist(index);
     else if (kind === 'netease-song' && typeof playHomeSong === 'function') playHomeSong(index);
-    else if (/^(qishui|kugou|spotify)-song$/.test(kind)) playHomePlatformFeedSong(kind.replace(/-song$/, ''), index);
+    else if (/^(qishui|kugou|kugou-lite|spotify)-song$/.test(kind)) playHomePlatformFeedSong(kind.replace(/-song$/, ''), index);
   });
   if (list) list.addEventListener('scroll', scheduleHomePlatformDailyWindowRender, { passive: true });
   window.addEventListener('resize', scheduleHomePlatformDailyWindowRender, { passive: true });
@@ -1239,6 +1255,29 @@ function bindHomePlatformRecommendationControls() {
   });
 }
 
+async function openHomeGuessLikeEntry() {
+  // Dedicated 猜你喜欢 entry — NEVER open library / 我喜欢.
+  try {
+    if (typeof fillHomeDiscoverFromKugouLite === 'function') {
+      await fillHomeDiscoverFromKugouLite();
+    }
+  } catch (_eFill) { console.warn('[HomeGuessLikeEntry] fill', _eFill); }
+  try {
+    if (typeof renderHomeDashboardDiscovery === 'function') renderHomeDashboardDiscovery();
+    if (typeof renderHomeDiscover === 'function') renderHomeDiscover();
+    if (typeof renderHomeDashboardQuickCards === 'function') renderHomeDashboardQuickCards();
+  } catch (_eRender) {}
+  if (typeof showToast === 'function') showToast('猜你喜欢（品味推荐）');
+  if (typeof openHomePlatformRecommendations === 'function') {
+    openHomePlatformRecommendations('kugou-lite');
+    return;
+  }
+  // Last resort: play discover songs only — still never open library/我喜欢.
+  if (homeDiscoverState && Array.isArray(homeDiscoverState.songs) && homeDiscoverState.songs.length && typeof playHomeDaily === 'function') {
+    return playHomeDaily();
+  }
+}
+
 function openHomePlatformRecommendations(preferredSource) {
   bindHomePlatformRecommendationControls();
   var mask = document.getElementById('home-platform-recommend-mask');
@@ -1251,10 +1290,12 @@ function openHomePlatformRecommendations(preferredSource) {
     ? 'netease'
     : (qishuiLoginStatus && (qishuiLoginStatus.loggedIn || qishuiLoginStatus.configured)
       ? 'qishui'
-      : (kugouLoginStatus && kugouLoginStatus.loggedIn
-        ? 'kugou'
-        : (spotifyLoginStatus && (spotifyLoginStatus.loggedIn || spotifyLoginStatus.configured) ? 'spotify' : 'netease')));
-  var source = /^(netease|qishui|qq|kugou|spotify)$/.test(String(preferredSource || '')) ? preferredSource : defaultSource;
+      : (typeof kugouLiteLoginStatus !== 'undefined' && kugouLiteLoginStatus && kugouLiteLoginStatus.loggedIn
+        ? 'kugou-lite'
+        : (kugouLoginStatus && kugouLoginStatus.loggedIn
+          ? 'kugou'
+          : (spotifyLoginStatus && (spotifyLoginStatus.loggedIn || spotifyLoginStatus.configured) ? 'spotify' : 'netease'))));
+  var source = /^(netease|qishui|qq|kugou|kugou-lite|spotify)$/.test(String(preferredSource || '')) ? preferredSource : defaultSource;
   loadHomePlatformRecommendations(source, false);
   setTimeout(function () {
     var activeTab = mask.querySelector('[data-home-recommend-source="' + source + '"]');

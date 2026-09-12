@@ -71,7 +71,7 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   clearNeteaseMusicLogin: () => ipcRenderer.invoke('netease-music-clear-login'),
   openQQMusicLogin: (options) => ipcRenderer.invoke('qq-music-open-login', options || {}),
   clearQQMusicLogin: () => ipcRenderer.invoke('qq-music-clear-login'),
-  openKugouMusicLogin: () => ipcRenderer.invoke('kugou-music-open-login'),
+  openKugouMusicLogin: (options) => ipcRenderer.invoke('kugou-music-open-login', options || {}),
   clearKugouMusicLogin: () => ipcRenderer.invoke('kugou-music-clear-login'),
   openKugouConceptLogin: () => ipcRenderer.invoke('kugou-concept-open-login'),
   clearKugouConceptLogin: () => ipcRenderer.invoke('kugou-concept-clear-login'),

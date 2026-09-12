@@ -1151,6 +1151,19 @@ var SONG_ACCOUNT_ACTION_ADAPTERS = {
     playlistCreateUrl: '',
     playlistTracksUrl: '/api/kugou/playlist/tracks'
   },
+  'kugou-lite': {
+    provider: 'kugou-lite',
+    label: '酷狗概念版',
+    like: true,
+    collect: true,
+    createPlaylist: true,
+    likeCheckUrl: '/api/kugou-lite/song/like/check',
+    likeCheckParam: 'hashes',
+    likeUrl: '/api/kugou-lite/song/like',
+    playlistAddUrl: '/api/kugou-lite/playlist/add-song',
+    playlistCreateUrl: '/api/kugou-lite/playlist/create',
+    playlistTracksUrl: '/api/kugou-lite/playlist/tracks'
+  },
   spotify: {
     provider: 'spotify',
     label: 'Spotify',
@@ -1192,6 +1205,7 @@ function songAccountProvider(song) {
   if (song.provider === 'spotify' || song.source === 'spotify' || song.type === 'spotify' || song.spotifyId || song.spotifyUri) return 'spotify';
   if (song.provider === 'qq' || song.source === 'qq' || song.type === 'qq') return 'qq';
   if (song.provider === 'qishui' || song.source === 'qishui' || song.type === 'qishui') return 'qishui';
+  if (song.provider === 'kugou-lite' || song.source === 'kugou-lite' || song.type === 'kugou-lite' || song.platform === 'lite') return 'kugou-lite';
   if (song.provider === 'kugou' || song.source === 'kugou' || song.type === 'kugou' || song.hash || song.audioHash) return 'kugou';
   return 'netease';
 }
@@ -1203,7 +1217,7 @@ function songAccountIdentityValues(song, provider) {
   song = song || {};
   provider = provider || songAccountProvider(song);
   var raw = [];
-  if (provider === 'kugou') {
+  if (provider === 'kugou' || provider === 'kugou-lite') {
     raw = [song.hash, song.audioHash, song.fileHash, song.providerSongId, song.id];
   } else if (provider === 'spotify') {
     raw = [song.spotifyId, song.providerSongId, song.id];
@@ -1217,7 +1231,7 @@ function songAccountIdentityValues(song, provider) {
   var seen = Object.create(null);
   return raw.map(function (value) {
     var normalized = String(value == null ? '' : value).trim();
-    return provider === 'kugou' ? normalized.toLowerCase() : normalized;
+    return (provider === 'kugou' || provider === 'kugou-lite') ? normalized.toLowerCase() : normalized;
   }).filter(function (value) {
     if (!value || seen[value]) return false;
     seen[value] = true;
@@ -1234,17 +1248,19 @@ function songAccountStateKey(song) {
 }
 function playlistAccountProvider(playlist) {
   var provider = String(playlist && (playlist.provider || playlist.source) || '').toLowerCase();
-  return /^(netease|qq|kugou|qishui|spotify)$/.test(provider) ? provider : 'netease';
+  return /^(netease|qq|kugou|kugou-lite|qishui|spotify)$/.test(provider) ? provider : 'netease';
 }
 function songAccountLoginStatus(provider) {
   if (provider === 'spotify') return spotifyLoginStatus || {};
   if (provider === 'qishui') return qishuiLoginStatus || {};
+  if (provider === 'kugou-lite') return (typeof kugouLiteLoginStatus !== 'undefined' && kugouLiteLoginStatus) || {};
   if (provider === 'kugou') return kugouLoginStatus || {};
   if (provider === 'qq') return qqLoginStatus || {};
   return loginStatus || {};
 }
 function isSongAccountLoggedIn(provider) {
   var status = songAccountLoginStatus(provider);
+  if (provider === 'kugou-lite') return !!(status && status.loggedIn);
   if (provider === 'kugou') return !!(status.loggedIn && status.playbackKeyReady);
   if (provider === 'qishui') return !!(status.loggedIn && (status.webSession || status.cookieReady));
   return !!status.loggedIn;
@@ -1312,10 +1328,14 @@ function syncLikeStatusForSongs(songs) {
     var adapter = songAccountAdapter(provider);
     var id = songAccountId(song, provider);
     if (!adapter || !adapter.like || !adapter.likeCheckUrl || !id || !isSongAccountLoggedIn(provider)) return;
-    if (!groups[provider]) groups[provider] = { adapter: adapter, ids: [], seen: Object.create(null) };
+    if (!groups[provider]) groups[provider] = { adapter: adapter, ids: [], seen: Object.create(null), mixByHash: Object.create(null) };
     if (groups[provider].seen[id]) return;
     groups[provider].seen[id] = true;
     groups[provider].ids.push(id);
+    if (provider === 'kugou-lite') {
+      var mix = String(song.mixSongId || song.albumAudioId || song.album_audio_id || '').trim();
+      if (mix) groups[provider].mixByHash[String(id).toLowerCase()] = mix;
+    }
   });
   var providers = Object.keys(groups);
   if (!providers.length) return;
@@ -1323,15 +1343,19 @@ function syncLikeStatusForSongs(songs) {
   var requests = [];
   providers.forEach(function (provider) {
     var group = groups[provider];
-    var batchSize = provider === 'spotify' || provider === 'qishui' ? 40 : (provider === 'kugou' ? 50 : 200);
+    var batchSize = provider === 'spotify' || provider === 'qishui' ? 40 : (provider === 'kugou' || provider === 'kugou-lite' ? 50 : 200);
     for (var offset = 0; offset < group.ids.length; offset += batchSize) {
       (function (batchIds) {
         var url = group.adapter.likeCheckUrl + '?' + group.adapter.likeCheckParam + '=' + encodeURIComponent(batchIds.join(','));
+        if (provider === 'kugou-lite' && group.mixByHash) {
+          var mixIds = batchIds.map(function (hid) { return group.mixByHash[String(hid).toLowerCase()] || ''; });
+          if (mixIds.every(Boolean)) url += '&mixsongids=' + encodeURIComponent(mixIds.join(','));
+        }
         requests.push(apiJson(url).then(function (r) {
           if (token < likeStatusToken - 3 || !r || !r.liked) return;
           var responseLiked = r.liked || {};
           batchIds.forEach(function (id) {
-            var responseId = provider === 'kugou' ? String(id).toLowerCase() : String(id);
+            var responseId = provider === 'kugou' || provider === 'kugou-lite' ? String(id).toLowerCase() : String(id);
             var liked = responseLiked[responseId];
             if (liked == null) liked = responseLiked[id];
             if (liked == null) return;
@@ -1358,7 +1382,7 @@ function syncLikeStatusForSong(song) {
 }
 function isLikedPlaylistContext(id, title, meta) {
   var rawId = String(id || '');
-  var idParts = rawId.match(/^(netease|qq|kugou|qishui|spotify):(.*)$/);
+  var idParts = rawId.match(/^(netease|qq|kugou-lite|kugou|qishui|spotify):(.*)$/);
   var provider = idParts ? idParts[1] : playlistAccountProvider(meta);
   var sid = idParts ? idParts[2] : rawId;
   var text = String(title || (meta && meta.name) || '').trim();

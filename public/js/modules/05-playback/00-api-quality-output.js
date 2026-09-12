@@ -12,7 +12,7 @@ async function apiJson(url, opts) {
   }
   try {
     var res = await fetch(url, fetchOpts);
-    return res.json();
+    return await res.json();
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -29,6 +29,7 @@ function normalizePlaybackQuality(value) {
 }
 function normalizePlaybackProvider(provider) {
   if (provider === 'qq') return 'qq';
+  if (provider === 'kugou-lite') return 'kugou';
   if (provider === 'kugou') return 'kugou';
   if (provider === 'qishui') return 'qishui';
   if (provider === 'spotify') return 'spotify';
@@ -46,6 +47,9 @@ function playbackQualityOptions(provider) {
 }
 function currentPlaybackQualityProvider() {
   var song = Array.isArray(playQueue) && currentIdx >= 0 && currentIdx < playQueue.length ? playQueue[currentIdx] : null;
+  if (song && song.resolvedPlaybackProvider) return normalizePlaybackProvider(song.resolvedPlaybackProvider);
+  if (typeof preferKugouLitePlayback === 'function' && preferKugouLitePlayback(song)) return 'kugou';
+  if (typeof shouldRematchPlaybackViaKugouLite === 'function' && shouldRematchPlaybackViaKugouLite(song)) return 'kugou';
   return normalizePlaybackProvider(songProviderKey(song));
 }
 function getProviderPlaybackQuality(provider) {
@@ -61,7 +65,11 @@ function setProviderPlaybackQuality(provider, value) {
   savePlaybackQualityPreference();
 }
 function getPlaybackQualityForSong(song) {
-  var provider = normalizePlaybackProvider(songProviderKey(song));
+  var provider = 'netease';
+  if (song && song.resolvedPlaybackProvider) provider = normalizePlaybackProvider(song.resolvedPlaybackProvider);
+  else if (typeof preferKugouLitePlayback === 'function' && preferKugouLitePlayback(song)) provider = 'kugou';
+  else if (typeof shouldRematchPlaybackViaKugouLite === 'function' && shouldRematchPlaybackViaKugouLite(song)) provider = 'kugou';
+  else provider = normalizePlaybackProvider(songProviderKey(song));
   return getProviderPlaybackQuality(provider);
 }
 function playbackQualityLabel(value, provider) {
@@ -292,7 +300,10 @@ function canReloadCurrentTrackForQuality() {
   if (!audio || !audio.src || audio.paused || audio.ended) return false;
   var song = playQueue[currentIdx];
   if (!song || song.type === 'local' || song.source === 'local') return false;
-  return songProviderKey(song) === 'netease' || songProviderKey(song) === 'qq' || songProviderKey(song) === 'kugou';
+  var key = songProviderKey(song);
+  if (key === 'kugou-lite') return true;
+  if (typeof preferKugouLitePlayback === 'function' && preferKugouLitePlayback(song)) return true;
+  return key === 'netease' || key === 'qq' || key === 'kugou';
 }
 function applyPlaybackQualityToCurrentTrack(nextQuality, provider) {
   var song = currentIdx >= 0 && currentIdx < playQueue.length ? playQueue[currentIdx] : null;

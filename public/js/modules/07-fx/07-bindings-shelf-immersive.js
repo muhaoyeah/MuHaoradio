@@ -267,7 +267,7 @@ function bindFxPanel() {
       sv.setPointerCapture && sv.setPointerCapture(e.pointerId);
       updateColorLabFromSv(e);
     });
-    sv.addEventListener('pointermove', function (e) { if (colorLabState.dragging) updateColorLabFromSv(e); });
+    sv.addEventListener('pointermove', function (e) { if (colorLabState && colorLabState.dragging) updateColorLabFromSv(e); });
     sv.addEventListener('pointerup', function () {
       colorLabState.dragging = false;
       if (typeof commitColorLabValue === 'function') commitColorLabValue(true);

@@ -20,6 +20,6 @@
 .home-wave-track span{flex:1;min-width:3px;border-radius:999px;background:linear-gradient(180deg,rgba(255,255,255,.92),color-mix(in srgb,var(--home-accent) 55%,rgba(255,255,255,.35)));height:4px;box-shadow:0 0 12px color-mix(in srgb,var(--home-accent) 35%,transparent)}
 #empty-home .home-hero:has(.home-hero-carousel) .daily-review-card{background:radial-gradient(520px 420px at 20% 12%,rgba(var(--fc-accent-rgb),.12),transparent 64%),linear-gradient(160deg,rgba(26,31,41,.18),rgba(4,6,10,.62))}
 #empty-home .home-hero:has(.home-dashboard-video) .home-hero-carousel,#empty-home .home-hero:has(.home-dashboard-video) .home-hero-carousel-shell,#empty-home .home-hero:has(.home-dashboard-video) .home-audio-reactor{opacity:0;visibility:hidden}
-body.empty-home-active .home-hero{animation:home-hero-enter .66s cubic-bezier(.16,1,.3,1) both}
-@keyframes home-hero-enter{0%{opacity:0;transform:translate3d(-10px,16px,0) scale(.985);filter:blur(10px)}100%{opacity:1;transform:none;filter:none}}
-@media (prefers-reduced-motion:reduce){body.empty-home-active .home-hero{animation:none}.home-hero-slide{transition:none}}
+body.home-shell-entering .home-hero,#empty-home.is-entering .home-hero{animation:home-hero-enter .85s cubic-bezier(.16,1,.3,1) both!important}
+@keyframes home-hero-enter{0%{opacity:0;transform:translate3d(0,18px,0) scale(.985);filter:blur(12px)}100%{opacity:1;transform:none;filter:none}}
+@media (prefers-reduced-motion:reduce){body.home-shell-entering .home-hero,#empty-home.is-entering .home-hero{animation:none!important}.home-hero-slide{transition:none}}

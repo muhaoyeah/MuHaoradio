@@ -122,17 +122,17 @@ function renderHomeDiscover() {
   var profileSub = document.getElementById('home-profile-sub');
   var libTitle = document.getElementById('home-library-title');
   var libSub = document.getElementById('home-library-sub');
-  if (weatherCardTitle) weatherCardTitle.textContent = '我的歌单';
+  if (weatherCardTitle) weatherCardTitle.textContent = '我的歌单库';
   if (weatherCardSub) {
-    weatherCardSub.textContent = playlistItem ? (((playlistItem.trackCount || 0) ? playlistItem.trackCount + ' 首 · ' : '') + (playlistItem.creator || '打开左侧歌单库')) : '打开左侧歌单库';
+    weatherCardSub.textContent = playlistItem ? (((playlistItem.trackCount || 0) ? playlistItem.trackCount + ' 首 · ' : '') + (playlistItem.creator || '歌单库') + ' · 非猜你喜欢') : '打开歌单库 · 不是猜你喜欢'
   }
   if (continueTitle) continueTitle.textContent = summary.recent ? summary.recent.name : '继续听';
   if (continueSub) continueSub.textContent = summary.recent ? (summary.recent.artist || summary.recent.source || '最近播放') : '最近播放会出现在这里';
   if (profileTitle) profileTitle.textContent = summary.topArtist ? summary.topArtist.name : (summary.topSong ? summary.topSong.name : '听歌画像');
   if (profileSub) profileSub.textContent = summary.topArtist ? ('常听歌手 · ' + summary.topArtist.plays + ' 次') : (summary.totalPlays ? summary.totalPlays + ' 次有效播放' : '播放几首后生成偏好');
   if (loggedOutHome) {
-    if (dailyTitle) dailyTitle.textContent = '每日推荐';
-    if (dailySub) dailySub.textContent = '登录后同步你的今日歌曲';
+    if (dailyTitle) dailyTitle.textContent = (typeof isKugouLiteHomeRecommendActive === 'function' && isKugouLiteHomeRecommendActive()) ? '猜你喜欢' : '每日推荐';
+    if (dailySub) dailySub.textContent = (typeof isKugouLiteHomeRecommendActive === 'function' && isKugouLiteHomeRecommendActive()) ? '登录后同步酷狗概念版听歌品味推荐' : '登录后同步你的今日歌曲';
     if (privateTitle) privateTitle.textContent = '推荐歌曲';
     if (privateSub) privateSub.textContent = '登录后同步更多歌曲';
     if (libTitle) libTitle.textContent = '更多歌曲';
@@ -144,8 +144,17 @@ function renderHomeDiscover() {
     setHomeArt('home-profile-art', summary.topSong && summary.topSong.cover || summary.recent && summary.recent.cover, 280);
     setHomeArt('home-library-art', '', 280);
   } else {
-    if (dailyTitle) dailyTitle.textContent = daily ? daily.name : '每日推荐';
-    if (dailySub) dailySub.textContent = daily ? ((daily.artist || songSourceLabel(daily) || '今日歌曲') + ' · 点击播放今日队列') : '同步你的今日歌曲';
+    if (typeof isKugouLiteHomeRecommendActive === 'function' && isKugouLiteHomeRecommendActive()) {
+      if (dailyTitle) dailyTitle.textContent = '猜你喜欢';
+      if (dailySub) dailySub.textContent = daily
+        ? ((daily.artist || songSourceLabel(daily) || '品味推荐') + ' · 酷狗概念版猜你喜欢')
+        : ((homeDiscoverState.recommendEndpoint === '/top/card')
+          ? '精选兜底 · 非我喜欢歌单'
+          : '根据听歌品味/习惯推荐 · 点击播放');
+    } else {
+      if (dailyTitle) dailyTitle.textContent = daily ? daily.name : '每日推荐';
+      if (dailySub) dailySub.textContent = daily ? ((daily.artist || songSourceLabel(daily) || '今日歌曲') + ' · 点击播放今日队列') : '同步你的今日歌曲';
+    }
     if (privateTitle) privateTitle.textContent = cardSongB ? cardSongB.name : '私人雷达';
     if (privateSub) privateSub.textContent = cardSongB ? (cardSongB.artist || songSourceLabel(cardSongB) || '推荐歌曲') : (homeDiscoverState.songs.length + ' 首 · 根据今日推荐与常听偏好');
     if (libTitle) libTitle.textContent = cardSongC ? cardSongC.name : (summary.topArtist ? summary.topArtist.name : '更多歌曲');
@@ -159,6 +168,76 @@ function renderHomeDiscover() {
   }
   renderHomeTiles();
 }
+
+
+function isKugouLiteHomeRecommendActive() {
+  try {
+    if (homeDiscoverState && (homeDiscoverState.source === 'kugou-lite' || homeDiscoverState.recommendMode === 'guess-like')) return true;
+    if (typeof kugouLiteSessionLoggedIn === 'function' && kugouLiteSessionLoggedIn()) return true;
+    if (typeof hasPlatformLogin === 'function' && hasPlatformLogin('kugou-lite')) return true;
+    if (typeof kugouLiteLoginStatus !== 'undefined' && kugouLiteLoginStatus) {
+      if (kugouLiteLoginStatus.loggedIn) return true;
+      if (kugouLiteLoginStatus.userid || kugouLiteLoginStatus.userId) return true;
+      if (kugouLiteLoginStatus.nickname && kugouLiteLoginStatus.playbackKeyReady) return true;
+      if (kugouLiteLoginStatus.token || kugouLiteLoginStatus.cookie || kugouLiteLoginStatus.session) return true;
+    }
+    if (typeof activeAccountProvider !== 'undefined' && activeAccountProvider === 'kugou-lite') return true;
+    if (typeof kugouLiteIsActiveAccount === 'function' && kugouLiteIsActiveAccount()) return true;
+    try {
+      var raw = localStorage.getItem('kugouLiteSession') || localStorage.getItem('kugou-lite-session') || sessionStorage.getItem('kugouLiteSession');
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (parsed && (parsed.userid || parsed.userId || parsed.token || parsed.loggedIn)) return true;
+      }
+    } catch (_ls) {}
+  } catch (_e) {}
+  return false;
+}
+
+
+async function fillHomeDiscoverFromKugouLite() {
+  var liteOn = false;
+  try {
+    if (typeof isKugouLiteHomeRecommendActive === 'function') liteOn = !!isKugouLiteHomeRecommendActive();
+    if (!liteOn && typeof kugouLiteSessionLoggedIn === 'function') liteOn = !!kugouLiteSessionLoggedIn();
+    if (!liteOn && typeof hasPlatformLogin === 'function') liteOn = !!hasPlatformLogin('kugou-lite');
+    if (!liteOn && typeof kugouLiteLoginStatus !== 'undefined' && kugouLiteLoginStatus) {
+      liteOn = !!(kugouLiteLoginStatus.loggedIn || kugouLiteLoginStatus.userid || kugouLiteLoginStatus.userId);
+    }
+    if (!liteOn && typeof activeAccountProvider !== 'undefined' && activeAccountProvider === 'kugou-lite') liteOn = true;
+  } catch (_) {}
+  // Still attempt API when session may exist server-side even if UI status lagged.
+  if (!liteOn) {
+    try {
+      var probe = await apiJson('/api/kugou-lite/recommendations?limit=4&t=' + Date.now(), { timeoutMs: 8000 });
+      if (probe && Array.isArray(probe.songs) && probe.songs.length) {
+        liteOn = true;
+      } else if (probe && probe.error && probe.error !== 'KUGOU_LITE_LOGIN_REQUIRED') {
+        liteOn = true;
+      }
+    } catch (_probe) {}
+  }
+  if (!liteOn) return false;
+  try {
+    var data = await apiJson('/api/kugou-lite/recommendations?limit=30&t=' + Date.now(), { timeoutMs: 16000 });
+    var songs = data && Array.isArray(data.songs) ? data.songs.map(cloneSong) : [];
+    if (!songs.length) return false;
+    var playable = songs.filter(function (s) { return s && s.playable !== false && !s.vipRequired; });
+    homeDiscoverState.songs = (playable.length ? playable : songs).slice();
+    homeDiscoverState.mode = homeDiscoverState.mode || 'member';
+    homeDiscoverState.loggedIn = true;
+    homeDiscoverState.updatedAt = Number(data && data.updatedAt) || Date.now();
+    homeDiscoverState.error = '';
+    homeDiscoverState.source = 'kugou-lite';
+    homeDiscoverState.recommendMode = data && data.mode ? String(data.mode) : 'guess-like';
+    homeDiscoverState.recommendEndpoint = data && data.endpoint ? String(data.endpoint) : '';
+    return true;
+  } catch (e) {
+    console.warn('[HomeDiscoverLite]', e);
+    return false;
+  }
+}
+
 async function loadHomeDiscover(force) {
   if (homeDiscoverState.loading) return;
   if (homeDiscoverState.loaded && !force) return;
@@ -175,6 +254,13 @@ async function loadHomeDiscover(force) {
     homeDiscoverState.playlists = homeDiscoverState.loggedIn ? ((data && data.playlists && data.playlists.length) ? data.playlists : userPlaylists.slice(0, 10)) : [];
     homeDiscoverState.podcasts = homeDiscoverState.loggedIn ? (data && data.podcasts || []) : [];
     homeDiscoverState.updatedAt = Number(data && data.updatedAt) || Date.now();
+    homeDiscoverState.source = (data && data.source) || (homeDiscoverState.songs.length ? 'netease' : '');
+    // When 酷狗概念版 is logged in, ALWAYS use 猜你喜欢 (personal FM) for this home entry — never keep NetEase dailySongs / never 我喜欢.
+    if (typeof isKugouLiteHomeRecommendActive === 'function' ? isKugouLiteHomeRecommendActive() : (typeof hasPlatformLogin === 'function' && hasPlatformLogin('kugou-lite'))) {
+      await fillHomeDiscoverFromKugouLite();
+    } else if ((!homeDiscoverState.songs || !homeDiscoverState.songs.length) && homeDiscoverState.loggedIn) {
+      await fillHomeDiscoverFromKugouLite();
+    }
     homeDiscoverState.loaded = true;
   } catch (e) {
     console.warn('home discover failed:', e);

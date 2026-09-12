@@ -2,6 +2,7 @@
 
 (function loadMineradioIndexModules() {
   const moduleCacheBust = String(Date.now());
+  const homeModuleCacheBust = '1789049902';
   const modulePaths = [
     'js/modules/00-state/00-core-stores.js',
     'js/modules/00-state/01-perf-render-state.js',
@@ -69,6 +70,7 @@
     'js/modules/05-playback/12-playback-switch-core.js',
     'js/modules/05-playback/13-playback-start-audio.js',
     'js/modules/05-playback/14-player-controls.js',
+    'js/modules/05-playback/19-muhao-beat-diag.js',
     'js/modules/05-playback/15-control-glass-animations.js',
     'js/modules/05-playback/16-cuefield-automix-core.js',
     'js/modules/05-playback/17-cuefield-timeline-executor.js',
@@ -110,7 +112,11 @@
 
   function readModule(path) {
     const request = new XMLHttpRequest();
-    request.open('GET', path + (path.indexOf('?') >= 0 ? '&' : '?') + 'v=' + moduleCacheBust, false);
+    var bust = 'v=' + moduleCacheBust;
+    if (/05-playback\/(03-home-discover-weather|03a-home-dashboard|03b-muhao-home-hero|04-home-empty-wallpaper)\.js$/.test(path)) {
+      bust += '&m=' + homeModuleCacheBust;
+    }
+    request.open('GET', path + (path.indexOf('?') >= 0 ? '&' : '?') + bust, false);
     request.send(null);
 
     if ((request.status < 200 || request.status >= 300) && request.status !== 0) {
@@ -124,3 +130,4 @@
   script.text = modulePaths.map(readModule).join('') + '\n//# sourceURL=mineradio-index-modules.js\n';
   document.currentScript.parentNode.insertBefore(script, document.currentScript.nextSibling);
 })();
+

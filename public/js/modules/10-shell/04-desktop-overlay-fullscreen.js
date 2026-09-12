@@ -1466,8 +1466,13 @@ function clearDesktopWindowTransitionClasses() {
   document.body.classList.remove('desktop-window-restoring');
 }
 
-function animateDesktopWindowMinimize(api) {
+function animateDesktopWindowMinimize(api, activationEvent) {
   if (!api || typeof api.minimize !== 'function') return;
+  // 仅真实用户点击（isTrusted）播放收起动画；合成/程序化触发直接最小化，避免动画态与真实窗口态错位。
+  if (activationEvent && activationEvent.isTrusted !== true) {
+    api.minimize();
+    return;
+  }
   if (desktopWindowReducedMotion()) {
     api.minimize();
     return;
@@ -1576,17 +1581,23 @@ function toggleFullscreen() {
   }
 
   document.querySelectorAll('[data-window-action]').forEach(function (btn) {
+    if (btn.__muhaoWindowActionBound) return;
+    btn.__muhaoWindowActionBound = true;
     btn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
       var action = btn.getAttribute('data-window-action');
-      if (action === 'minimize') animateDesktopWindowMinimize(api);
+      var winApi = api || (typeof getDesktopWindowApi === 'function' ? getDesktopWindowApi() : null) || window.desktopWindow;
+      if (action === 'minimize') animateDesktopWindowMinimize(api, e);
       if (action === 'maximize') toggleFullscreen();
       if (action === 'close') {
-        saveLastPlaybackSnapshot(true, 'window-close');
-        api.close(closeBehaviorPreference);
+        try { saveLastPlaybackSnapshot(true, 'window-close'); } catch (err) {}
+        try {
+          if (winApi && typeof winApi.close === 'function') winApi.close(closeBehaviorPreference || 'quit');
+          else if (window.desktopWindow && typeof window.desktopWindow.close === 'function') window.desktopWindow.close('quit');
+        } catch (err2) {}
       }
-    });
+    }, true);
   });
 
   if (typeof api.onDesktopLyricsLockState === 'function') {

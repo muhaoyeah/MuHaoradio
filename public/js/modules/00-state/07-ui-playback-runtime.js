@@ -16,6 +16,28 @@ var fxFabAutoHideRevealArmed = true;
 var closeBehaviorPreference = readCloseBehaviorPreference();
 var startupAutoplayPreference = readBooleanPreference(STARTUP_AUTOPLAY_STORE_KEY, false);
 var startupFastSkipPreference = readBooleanPreference(STARTUP_FAST_SKIP_STORE_KEY, false);
+// MuHao one-shot: restore official splash after debug era forced fast-skip on.
+try {
+  if (!localStorage.getItem('muhao-startup-fast-skip-restored-v1')) {
+    startupFastSkipPreference = false;
+    if (typeof saveBooleanPreference === 'function') saveBooleanPreference(STARTUP_FAST_SKIP_STORE_KEY, false);
+    else localStorage.setItem(STARTUP_FAST_SKIP_STORE_KEY, '0');
+    localStorage.setItem('muhao-startup-fast-skip-restored-v1', '1');
+  }
+} catch (e) {}
+// MuHao splash v3b: one-shot force-show - kill fast-skip so wordmark always paints this era.
+try {
+  if (!localStorage.getItem('muhao-splash-v3-force-show-v1')) {
+    startupFastSkipPreference = false;
+    if (typeof saveBooleanPreference === 'function') saveBooleanPreference(STARTUP_FAST_SKIP_STORE_KEY, false);
+    else localStorage.setItem(STARTUP_FAST_SKIP_STORE_KEY, '0');
+    localStorage.setItem('muhao-splash-v3-force-show-v1', '1');
+  }
+  if (document.documentElement.classList.contains('startup-fast-skip-preload') &&
+      localStorage.getItem('mineradio-startup-fast-skip-v1') !== '1') {
+    document.documentElement.classList.remove('startup-fast-skip-preload');
+  }
+} catch (e) {}
 var startupResumeModePreference = readStartupResumeModePreference();
 var startupAutoplayAttempted = false;
 var startupAutoplayJobId = 0;
@@ -38,7 +60,7 @@ var immersiveState = {
   bottomVisible: false
 };
 
-// 鼠标 / 摄像头视差
+// pointer / camera parallax
 var pointerParallax = { x: 0, y: 0 };
 var pointerTarget = { x: 0, y: 0 };
 var headParallax = { x: 0, y: 0, active: false };

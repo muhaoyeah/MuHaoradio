@@ -68,3 +68,24 @@ tmp/
 *.png.tmp
 verification/
 screenshots/
+vendor/KuGouMusicApi/node_modules/
+vendor/KuGouMusicApi/.env
+.kugou-lite-cookie
+.kugou-lite-session.json
+.kugou-lite-*
+
+kugou-lite-session.json
+**/.kugou-lite-session.json
+**/kugou-lite-session.json
+
+# --- 备份文件、一次性调试产物、本机配置（2026-09-13 加入，避免污染公开仓库）---
+*.bak
+*.bak-*
+*.bak.*
+tools/_*
+tools/build-win-artifacts.txt
+tools/build-win-versions.txt
+.npmrc
+
+# 第三方嵌套仓库：自带 .git，16MB，独立维护，不进本仓库
+vendor/KuGouMusicApi/

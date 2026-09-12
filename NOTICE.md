@@ -31,3 +31,6 @@ Mineradio 名称、MR Logo、界面视觉设计、启动动画方向、粒子视
 emily 作为 Mineradio 早期视觉底层想法与 `emily` 视觉预设改进方向的共创者和灵感来源之一，特此致谢。
 
 感谢小天才e宝、应春日、锋将军、軌跡、林中、骊、风痕、花椰菜🥦在早期体验、测试反馈和发布准备中的帮助。
+## KuGou Lite (unofficial)
+
+Mineradio's KuGou Lite integration talks to an unofficial community KuGouMusicApi-compatible lite service for search, lyrics, and playback URL resolution when the user chooses that source. It is not an official KuGou / Tencent product. Account login (for example QR) stays on the user's machine for their own session; please follow KuGou's terms, copyright rules, and any VIP/entitlement limits that apply to the signed-in account.

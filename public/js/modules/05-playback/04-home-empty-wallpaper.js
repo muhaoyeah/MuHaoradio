@@ -127,15 +127,55 @@ function applyStartupStarfieldPreset() {
     syncFxUniforms();
   }
 }
+var __homeEnterTimer = 0;
+function clearHomeShellEntering() {
+  document.body.classList.remove('home-shell-entering');
+  document.body.classList.add('home-enter-played');
+  var eh = document.getElementById('empty-home');
+  if (eh) {
+    eh.classList.remove('is-entering');
+    eh.classList.add('home-enter-played');
+  }
+}
+function forceHomeShellEntranceAfterSplash() {
+  emptyHomeActive = false; // so updateEmptyHomeVisibility treats next show as fresh
+  var shown = updateEmptyHomeVisibility({ forceLoad: true });
+  if (shown) triggerHomeShellEntrance();
+  return shown;
+}
+function triggerHomeShellEntrance() {
+  var eh = document.getElementById('empty-home');
+  document.body.classList.remove('home-shell-entering', 'home-enter-played');
+  if (eh) eh.classList.remove('is-entering', 'home-enter-played');
+  if (__homeEnterTimer) clearTimeout(__homeEnterTimer);
+  // Wait until empty-home is actually painted. Same-frame display:none→block + animation
+  // is often skipped by Chromium (looks like "no entrance at all").
+  var kick = function () {
+    if (!document.body.classList.contains('empty-home-active')) return;
+    if (document.body.classList.contains('splash-active')) return;
+    void (eh || document.body).offsetWidth;
+    document.body.classList.add('home-shell-entering');
+    if (eh) eh.classList.add('is-entering');
+    __homeEnterTimer = setTimeout(clearHomeShellEntering, 1800);
+  };
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      setTimeout(kick, 40);
+    });
+  });
+}
+
 function updateEmptyHomeVisibility(opts) {
   opts = opts || {};
   var show = shouldShowEmptyHome();
+  var wasActive = !!emptyHomeActive;
   emptyHomeActive = show;
   document.body.classList.toggle('empty-home-active', show);
   if (!show) setHomeControlsLocked(false);
   if (show) activateHomeWallpaperPreview();
   else deactivateHomeWallpaperPreview(false);
   if (show) {
+    if (!wasActive) triggerHomeShellEntrance();
     setPeek(document.getElementById('search-area'), true, 'search');
     renderHomeDiscover();
     if (!hasAnyPlatformLogin()) {
@@ -151,6 +191,14 @@ function updateEmptyHomeVisibility(opts) {
       renderHomeDiscover();
       scheduleVisualApply(function () { loadHomeDiscover(!!opts.forceLoad); }, 220, 1200);
     }
+  } else {
+    if (__homeEnterTimer) {
+      clearTimeout(__homeEnterTimer);
+      __homeEnterTimer = 0;
+    }
+    document.body.classList.remove('home-shell-entering', 'home-enter-played');
+    var ehLeave = document.getElementById('empty-home');
+    if (ehLeave) ehLeave.classList.remove('is-entering', 'home-enter-played');
   }
   return show;
 }
@@ -194,6 +242,7 @@ async function waitForHomeDiscoverIdle(timeout) {
     await new Promise(function (resolve) { setTimeout(resolve, 80); });
   }
 }
+
 async function playHomeDaily() {
   homeForcedOpen = false;
   homeSuppressed = false;
@@ -202,20 +251,52 @@ async function playHomeDaily() {
     showLoginModal({ source: 'home-daily' });
     return;
   }
+  var liteOn = false;
+  try {
+    if (typeof isKugouLiteHomeRecommendActive === 'function') liteOn = !!isKugouLiteHomeRecommendActive();
+    else if (typeof hasPlatformLogin === 'function') liteOn = !!hasPlatformLogin('kugou-lite');
+    else if (typeof kugouLiteLoginStatus !== 'undefined' && kugouLiteLoginStatus) liteOn = !!kugouLiteLoginStatus.loggedIn;
+  } catch (_) {}
   await waitForHomeDiscoverIdle();
   if (!homeDiscoverState.loaded || (!homeDiscoverState.songs.length && !homeDiscoverState.loading)) {
     await loadHomeDiscover(true);
   }
+  // 酷狗概念版已登录：强制刷新猜你喜欢，绝不沿用网易云每日推荐 / 我喜欢歌单
+  if (liteOn && typeof fillHomeDiscoverFromKugouLite === 'function') {
+    await fillHomeDiscoverFromKugouLite();
+  } else if (!homeDiscoverState.songs.length && typeof fillHomeDiscoverFromKugouLite === 'function') {
+    await fillHomeDiscoverFromKugouLite();
+  }
   if (!homeDiscoverState.songs.length) {
-    runHomeSearch('每日推荐');
+    if (liteOn && typeof openHomePlatformRecommendations === 'function') {
+      openHomePlatformRecommendations('kugou-lite');
+      if (typeof showToast === 'function') showToast('已打开概念版猜你喜欢');
+      return;
+    }
+    if (typeof openHomePlatformRecommendations === 'function' && typeof hasPlatformLogin === 'function' && hasPlatformLogin('kugou-lite')) {
+      openHomePlatformRecommendations('kugou-lite');
+      if (typeof showToast === 'function') showToast('已打开概念版猜你喜欢');
+      return;
+    }
+    // Never keyword-search 每日推荐 when lite is available; only fall back for non-lite
+    if (!liteOn) runHomeSearch('每日推荐');
+    else if (typeof showToast === 'function') showToast('猜你喜欢暂无数据，请稍后重试');
     return;
+  }
+  // Browse experience: show 猜你喜欢 panel when lite
+  if (liteOn && typeof openHomePlatformRecommendations === 'function') {
+    openHomePlatformRecommendations('kugou-lite');
   }
   playQueue = homeDiscoverState.songs.map(cloneSong);
   currentIdx = 0;
   safeRenderQueuePanel('home-daily');
   safeShelfRebuild('home-daily', true);
   forcePlaybackControlsInteractive();
-  playQueueAt(0).catch(function (e) { console.warn('[HomeDailyPlay]', e); });
+  playQueueAt(0, {
+    manual: true,
+    context: { type: 'home-daily', playlistName: (liteOn || homeDiscoverState.source === 'kugou-lite' ? '猜你喜欢' : '每日推荐') },
+  }).catch(function (e) { console.warn('[HomeDailyPlay]', e); });
+  if (liteOn && typeof showToast === 'function') showToast('正在播放猜你喜欢');
 }
 async function playHomePrivateRadio() {
   homeForcedOpen = false;

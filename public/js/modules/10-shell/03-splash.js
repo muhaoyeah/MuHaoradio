@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 
 document.body.classList.add('splash-active');
 var splashAnimating = true;
@@ -14,7 +14,33 @@ var splashSoundPlayed = false;
 var splashAudioCtx = null;
 var splashSoundFallbackArmed = false;
 var splashTimer = null;
+var osPrefersReducedMotion = false;
+try {
+  osPrefersReducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+} catch (e) { osPrefersReducedMotion = false; }
+// Product splash: do NOT treat Windows reduce-motion as full cinema disable.
 var reduceSplashMotion = false;
+var MUHAO_SPLASH_OS_REDUCED = osPrefersReducedMotion;
+
+// MuHao splash cinema timing (READY>=2000 / AUTO>=3500 / GATE 800)
+var MUHAO_SPLASH_READY_MS = 2000;
+var MUHAO_SPLASH_AUTO_MS = 3500;
+var MUHAO_SPLASH_GATE_MS = 800;
+var MUHAO_SPLASH_MARK_ON_MS = 1100;
+var MUHAO_SPLASH_SETTLE_MS = 2200;
+var MUHAO_SPLASH_PEEK_MS = 280;
+var MUHAO_SPLASH_HOLD_COMMIT_MS = 600;
+var MUHAO_SPLASH_MAGNET_MAX = 6;
+var muhaoSplashPointerRaf = 0;
+var muhaoSplashPointerTX = 0;
+var muhaoSplashPointerTY = 0;
+var muhaoSplashPointerCX = 0;
+var muhaoSplashPointerCY = 0;
+var muhaoSplashHoldTimer = null;
+var muhaoSplashHoldStartedAt = 0;
+var muhaoSplashHoldActive = false;
+var muhaoSplashCommitting = false;
+var muhaoSplashGatePassed = false;
 var splashReadyToEnter = false;
 
 function splashClamp01(v) { return Math.max(0, Math.min(1, v)); }
@@ -231,13 +257,19 @@ function drawMineradioSplashWebgl(elapsed) {
   gl.enableVertexAttribArray(splashGlUniforms.position);
   gl.vertexAttribPointer(splashGlUniforms.position, 2, gl.FLOAT, false, 0, 0);
   gl.uniform2f(splashGlUniforms.resolution, splashCanvas.width, splashCanvas.height);
-  gl.uniform1f(splashGlUniforms.time, elapsed);
+  gl.uniform1f(splashGlUniforms.time, elapsed * 0.62);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
 (function initMineradioSplashCanvas() {
   splashCanvas = document.getElementById('splash-canvas');
   if (!splashCanvas) return;
+  // v3: CSS light-slit only 鈥?no WebGL / particle canvas
+  splashCanvas.style.display = 'none';
+  splashCtx = null;
+  splashGl = null;
+  splashAnimating = false; // stop canvas RAF loop; CSS handles ritual
+  return;
   if (!reduceSplashMotion && initMineradioSplashWebgl(splashCanvas)) {
     splashCtx = null;
   } else {
@@ -578,7 +610,13 @@ function finishSplashReveal(forceLoad, opts) {
   // The desktop HWND may already be in its native handoff at this point.
   releaseStartupFastSkipPreload();
   requestAnimationFrame(function () {
-    var homeShown = updateEmptyHomeVisibility({ forceLoad: forceLoad !== false });
+    var homeShown = (typeof forceHomeShellEntranceAfterSplash === 'function')
+      ? forceHomeShellEntranceAfterSplash()
+      : updateEmptyHomeVisibility({ forceLoad: forceLoad !== false });
+    if (homeShown && typeof triggerHomeShellEntrance === 'function') {
+      // Extra kick after splash paint (covers cases where empty-home was already flagged active).
+      setTimeout(function () { try { triggerHomeShellEntrance(); } catch (_e) {} }, 80);
+    }
     if (!homeShown && shouldForceEmptyHomeAfterSplash()) {
       homeSuppressed = false;
       homeForcedOpen = true;
@@ -601,6 +639,10 @@ function dismissSplash(opts) {
   var instant = !!opts.instant;
   markAppPerf(instant ? 'splash-skip' : 'splash-dismiss');
   if (splashTimer) { clearTimeout(splashTimer); splashTimer = null; }
+  if (typeof muhaoSplashAutoEnterTimer !== 'undefined' && muhaoSplashAutoEnterTimer) {
+    clearTimeout(muhaoSplashAutoEnterTimer);
+    muhaoSplashAutoEnterTimer = null;
+  }
   splashReadyToEnter = false;
   s.classList.remove('ready');
   setTimeout(stopSplashIntroSound, instant ? 0 : 240);
@@ -612,6 +654,7 @@ function dismissSplash(opts) {
     document.body.classList.remove('splash-revealing');
     revealIdleParticles(0, 520);
     finishSplashReveal(true, { fastSkip: true, reason: 'fast-skip' });
+    onMuhaoSplashEntered();
     return;
   }
   if (typeof shouldUseIdleWallpaperPreview === 'function'
@@ -637,7 +680,37 @@ function dismissSplash(opts) {
     document.body.classList.remove('splash-revealing');
     if (s && s.parentNode) s.style.display = 'none';
     finishSplashReveal(true, { reason: 'splash-dismiss' });
+    onMuhaoSplashEntered();
   }, 620);
+}
+
+// MUHAO: play full splash animation, then auto-enter via official dismissSplash (never stuck).
+var muhaoSplashAutoEnterTimer = null;
+var muhaoSplashEnteredOnce = false;
+
+function muhaoSplashElapsedMs() {
+  return performance.now() - splashStartedAt;
+}
+
+function scheduleMuhaoSplashAutoEnter() {
+  if (muhaoSplashAutoEnterTimer) clearTimeout(muhaoSplashAutoEnterTimer);
+  var remain = Math.max(0, MUHAO_SPLASH_AUTO_MS - muhaoSplashElapsedMs());
+  muhaoSplashAutoEnterTimer = setTimeout(function () {
+    muhaoSplashAutoEnterTimer = null;
+    try {
+      if (splashReadyToEnter && !muhaoSplashCommitting && typeof dismissSplash === 'function') {
+        commitMuhaoSplashEnter('auto');
+      }
+    } catch (e) {}
+  }, remain);
+}
+
+function onMuhaoSplashEntered() {
+  if (muhaoSplashEnteredOnce) return;
+  muhaoSplashEnteredOnce = true;
+  try {
+    if (typeof bootMuhaoHomeHero === 'function') bootMuhaoHomeHero();
+  } catch (e) {}
 }
 
 function markSplashReadyToEnter() {
@@ -649,36 +722,183 @@ function markSplashReadyToEnter() {
   s.classList.add('ready');
   s.setAttribute('role', 'button');
   s.setAttribute('tabindex', '0');
-  s.setAttribute('aria-label', '点击进入 Mineradio');
+  s.setAttribute('aria-label', 'Enter MuHao Radio');
+  scheduleMuhaoSplashAutoEnter();
+}
+
+function spawnMuhaoSplashRipple(x, y) {
+  var s = document.getElementById('splash');
+  if (!s) return;
+  var rip = document.createElement('span');
+  rip.className = 'splash-ripple';
+  rip.style.left = x + 'px';
+  rip.style.top = y + 'px';
+  s.appendChild(rip);
+  setTimeout(function () {
+    if (rip && rip.parentNode) rip.parentNode.removeChild(rip);
+  }, 560);
+}
+
+function applyMuhaoSplashParallax() {
+  muhaoSplashPointerRaf = 0;
+  muhaoSplashPointerCX += (muhaoSplashPointerTX - muhaoSplashPointerCX) * 0.14;
+  muhaoSplashPointerCY += (muhaoSplashPointerTY - muhaoSplashPointerCY) * 0.14;
+  var word = document.getElementById('splash-wordmark');
+  var glow = document.querySelector('#splash .splash-letter-glow');
+  var magnetX = 0, magnetY = 0;
+  if (!reduceSplashMotion) {
+    var dist = Math.hypot(muhaoSplashPointerCX, muhaoSplashPointerCY);
+    var pull = Math.max(0, 1 - dist / 140);
+    magnetX = muhaoSplashPointerCX * 0.08 * pull;
+    magnetY = muhaoSplashPointerCY * 0.08 * pull;
+    var mlen = Math.hypot(magnetX, magnetY);
+    if (mlen > MUHAO_SPLASH_MAGNET_MAX) {
+      magnetX *= MUHAO_SPLASH_MAGNET_MAX / mlen;
+      magnetY *= MUHAO_SPLASH_MAGNET_MAX / mlen;
+    }
+  }
+  var tx = (muhaoSplashPointerCX * 0.028 + magnetX * 0.7).toFixed(2);
+  var ty = (muhaoSplashPointerCY * 0.028 + magnetY * 0.7).toFixed(2);
+  if (word) word.style.transform = 'translate3d(' + tx + 'px,' + ty + 'px,0)';
+  if (glow) glow.style.transform = 'translate3d(' + (muhaoSplashPointerCX * 0.045).toFixed(2) + 'px,' + (muhaoSplashPointerCY * 0.045).toFixed(2) + 'px,0)';
+}
+
+function onMuhaoSplashPointerMove(e) {
+  if (reduceSplashMotion || muhaoSplashCommitting) return;
+  var s = document.getElementById('splash');
+  if (!s || !document.body.classList.contains('splash-active')) return;
+  var rect = s.getBoundingClientRect();
+  muhaoSplashPointerTX = e.clientX - (rect.left + rect.width * 0.5);
+  muhaoSplashPointerTY = e.clientY - (rect.top + rect.height * 0.5);
+  if (!muhaoSplashPointerRaf) muhaoSplashPointerRaf = requestAnimationFrame(applyMuhaoSplashParallax);
+}
+
+function clearMuhaoSplashHold() {
+  if (muhaoSplashHoldTimer) {
+    clearTimeout(muhaoSplashHoldTimer);
+    muhaoSplashHoldTimer = null;
+  }
+  muhaoSplashHoldActive = false;
+  var s = document.getElementById('splash');
+  if (s) s.classList.remove('splash-peek');
+}
+
+function commitMuhaoSplashEnter(reason) {
+  if (muhaoSplashCommitting) return;
+  var s = document.getElementById('splash');
+  if (!s || s.classList.contains('hide') || s.classList.contains('exiting')) return;
+  if (!splashReadyToEnter && reason !== 'instant') return;
+  muhaoSplashCommitting = true;
+  clearMuhaoSplashHold();
+  if (muhaoSplashAutoEnterTimer) {
+    clearTimeout(muhaoSplashAutoEnterTimer);
+    muhaoSplashAutoEnterTimer = null;
+  }
+  s.classList.add('splash-commit');
+  setTimeout(function () {
+    try { dismissSplash(); } catch (e) {}
+  }, reason === 'auto' ? 40 : 160);
+}
+
+function requestMuhaoSplashEnter(evt) {
+  playMineradioIntroSound();
+  if (muhaoSplashElapsedMs() < MUHAO_SPLASH_GATE_MS) {
+    if (evt && typeof evt.clientX === 'number') spawnMuhaoSplashRipple(evt.clientX, evt.clientY);
+    else {
+      var s = document.getElementById('splash');
+      if (s) {
+        var r = s.getBoundingClientRect();
+        spawnMuhaoSplashRipple(r.left + r.width * 0.5, r.top + r.height * 0.5);
+      }
+    }
+    return;
+  }
+  if (splashReadyToEnter) commitMuhaoSplashEnter('click');
 }
 
 document.addEventListener('DOMContentLoaded', function () {
   var s = document.getElementById('splash');
   if (!s) return;
   markAppPerf('dom-content-loaded');
-  if (startupFastSkipPreference) {
+  // Cinema restore: clear fast-skip on every boot unless user explicitly allows it.
+  try {
+    var allowFastSkip = localStorage.getItem('muhao-allow-fast-skip-v1') === '1';
+    if (!allowFastSkip) {
+      localStorage.setItem('mineradio-startup-fast-skip-v1', '0');
+      startupFastSkipPreference = false;
+      document.documentElement.classList.remove('startup-fast-skip-preload');
+    }
+  } catch (e) {}
+  if (startupFastSkipPreference && (function () {
+    try { return localStorage.getItem('muhao-allow-fast-skip-v1') === '1'; } catch (e2) { return false; }
+  })()) {
     dismissSplash({ instant: true });
     return;
   }
   armSplashSoundFallback();
   prewarmHomeWallpaperPreview();
-  function requestSplashEnter() {
-    playMineradioIntroSound();
-    if (splashReadyToEnter) dismissSplash();
+
+  s.addEventListener('pointermove', onMuhaoSplashPointerMove, { passive: true });
+  s.addEventListener('click', function (e) {
+    requestMuhaoSplashEnter(e);
+  });
+  s.addEventListener('pointerdown', function (e) {
+    if (e.button != null && e.button !== 0) return;
+    if (muhaoSplashCommitting) return;
+    muhaoSplashHoldStartedAt = performance.now();
+    clearMuhaoSplashHold();
+    muhaoSplashHoldTimer = setTimeout(function () {
+      muhaoSplashHoldActive = true;
+      if (s && !s.classList.contains('exiting')) s.classList.add('splash-peek');
+    }, MUHAO_SPLASH_PEEK_MS);
+  });
+  function endHold(e) {
+    if (!muhaoSplashHoldStartedAt) return;
+    var held = performance.now() - muhaoSplashHoldStartedAt;
+    var wasPeek = muhaoSplashHoldActive;
+    clearMuhaoSplashHold();
+    muhaoSplashHoldStartedAt = 0;
+    if (held >= MUHAO_SPLASH_HOLD_COMMIT_MS && wasPeek) {
+      playMineradioIntroSound();
+      if (muhaoSplashElapsedMs() >= MUHAO_SPLASH_GATE_MS && splashReadyToEnter) {
+        commitMuhaoSplashEnter('hold');
+      }
+      return;
+    }
+    // short peek release — snap opacity back (class already cleared)
   }
-  s.addEventListener('click', requestSplashEnter);
+  s.addEventListener('pointerup', endHold);
+  s.addEventListener('pointercancel', endHold);
+  s.addEventListener('pointerleave', function () {
+    if (muhaoSplashHoldActive) clearMuhaoSplashHold();
+  });
+
   document.addEventListener('keydown', function (e) {
     if (!document.body.classList.contains('splash-active')) return;
     if (e.key === 'Enter' || e.code === 'Space') {
       e.preventDefault();
-      requestSplashEnter();
+      requestMuhaoSplashEnter(null);
     }
   });
-  if (reduceSplashMotion) {
-    s.classList.add('reduce-motion');
-    splashTimer = setTimeout(markSplashReadyToEnter, 650);
-    return;
+
+  // Always play cinema: slit -> delayed mark-on (no flatten) -> settle.
+  if (MUHAO_SPLASH_OS_REDUCED) {
+    try { console.info('[MuHaoSplash] OS prefers-reduced-motion detected; still running cinema (product override)'); } catch (e0) {}
   }
+  requestAnimationFrame(function () {
+    s.classList.add('splash-slit-run');
+    s.classList.add('splash-cinema-boost');
+  });
+  setTimeout(function () {
+    if (s && !s.classList.contains('hide') && !s.classList.contains('exiting')) {
+      s.classList.add('splash-mark-on');
+    }
+  }, MUHAO_SPLASH_MARK_ON_MS);
+  setTimeout(function () {
+    if (s && !s.classList.contains('hide') && !s.classList.contains('exiting')) {
+      s.classList.add('splash-settled');
+    }
+  }, MUHAO_SPLASH_SETTLE_MS);
   playMineradioIntroSound();
-  splashTimer = setTimeout(markSplashReadyToEnter, 1500);
+  splashTimer = setTimeout(markSplashReadyToEnter, MUHAO_SPLASH_READY_MS);
 });

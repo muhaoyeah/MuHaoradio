@@ -13,6 +13,7 @@ var homeHeroCarouselCopy = [
   { kicker: 'Visual Radio', title: '继续播放昨天', sub: '照片、歌单、最近播放和视觉效果，慢慢长成你的私人电台。', moodA: '昨天的歌', moodB: '视觉舞台' },
 ];
 function setHomeHeroSlide(nextIndex) {
+  if (!homeHeroCarouselState) return;
   var slides = Array.from(document.querySelectorAll('.home-hero-slide'));
   var dots = Array.from(document.querySelectorAll('.home-hero-dot'));
   if (!slides.length) return;
@@ -43,6 +44,7 @@ function stepHomeHeroSlide(delta) {
   restartHomeHeroCarousel();
 }
 function restartHomeHeroCarousel() {
+  if (!homeHeroCarouselState) return;
   if (homeHeroCarouselState.timer) {
     clearInterval(homeHeroCarouselState.timer);
     homeHeroCarouselState.timer = null;
@@ -54,6 +56,12 @@ function restartHomeHeroCarousel() {
   }, homeHeroCarouselState.intervalMs);
 }
 function initHomeHeroCarousel() {
+  var heroRoot = document.querySelector('.home-hero-carousel') || document.getElementById('home-hero') || document.querySelector('.empty-home');
+  if (heroRoot && !heroRoot.muhaoHeroHoverPauseBound) {
+    heroRoot.muhaoHeroHoverPauseBound = true;
+    heroRoot.addEventListener('mouseenter', function () { if (homeHeroCarouselState) homeHeroCarouselState.paused = true; });
+    heroRoot.addEventListener('mouseleave', function () { if (homeHeroCarouselState) { homeHeroCarouselState.paused = false; restartHomeHeroCarousel(); } });
+  }
   var carousel = document.getElementById('home-hero-carousel');
   var dotsWrap = document.getElementById('home-hero-dots');
   var slides = Array.from(document.querySelectorAll('.home-hero-slide'));
@@ -64,10 +72,10 @@ function initHomeHeroCarousel() {
   }).join('');
   var hero = carousel.closest('.home-hero');
   if (hero) {
-    hero.addEventListener('mouseenter', function() { homeHeroCarouselState.paused = true; });
-    hero.addEventListener('mouseleave', function() { homeHeroCarouselState.paused = false; });
-    hero.addEventListener('focusin', function() { homeHeroCarouselState.paused = true; });
-    hero.addEventListener('focusout', function() { homeHeroCarouselState.paused = false; });
+    hero.addEventListener('mouseenter', function() { if (homeHeroCarouselState) homeHeroCarouselState.paused = true; });
+    hero.addEventListener('mouseleave', function() { if (homeHeroCarouselState) homeHeroCarouselState.paused = false; });
+    hero.addEventListener('focusin', function() { if (homeHeroCarouselState) homeHeroCarouselState.paused = true; });
+    hero.addEventListener('focusout', function() { if (homeHeroCarouselState) homeHeroCarouselState.paused = false; });
   }
   var prev = document.querySelector('[data-home-hero-prev]');
   var next = document.querySelector('[data-home-hero-next]');
@@ -130,7 +138,10 @@ function ensureMuhaoHomeHeroMarkup() {
 }
 
 var _muhaoHomeHeroInited = false;
+var muhaoHomeHeroBooted = false;
 function bootMuhaoHomeHero() {
+  if (muhaoHomeHeroBooted) return;
+  muhaoHomeHeroBooted = true;
   if (!ensureMuhaoHomeHeroMarkup()) return;
   if (!_muhaoHomeHeroInited) {
     _muhaoHomeHeroInited = true;

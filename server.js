@@ -133,8 +133,12 @@ const {
   readCuefieldFeedbackStats,
 } = require('./cuefield/feedback-log');
 const { planCuefieldTransitionFromCache } = require('./cuefield/mineradio-bridge');
+const kugouLiteSession = require('./desktop/kugou-lite-session');
+const kugouLiteMedia = require('./desktop/kugou-lite-media');
 
 const PORT = process.env.PORT || 3000;
+// Bare `node server.js` defaults to 0.0.0.0 (LAN-reachable).
+// Electron sets process.env.HOST='127.0.0.1' before requiring this module.
 const HOST = process.env.HOST || '0.0.0.0';
 const LOGIN_EASTER_EGG_GATE_FILE = String(process.env.MINERADIO_LOGIN_EASTER_EGG_GATE_FILE || '');
 const LOGIN_EASTER_EGG_GATE_VERSION = String(process.env.MINERADIO_LOGIN_EASTER_EGG_GATE_VERSION || 'world-peace-v1');
@@ -147,6 +151,11 @@ const LOGIN_EASTER_EGG_PROTECTED_ROUTES = new Set([
   '/api/kugou/login/cookie',
   '/api/qishui/login/qrcode',
   '/api/qishui/login/check',
+  '/api/kugou-lite/logout',
+  '/api/kugou-lite/login/status',
+  '/api/kugou-lite/login/qr/check',
+  '/api/kugou-lite/login/qr/create',
+  '/api/kugou-lite/login/qr/key',
   '/api/spotify/config',
 ]);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -412,6 +421,11 @@ function clearAllRuntimeLoginCredentials(reason) {
   qqVipInfoCache.clear();
   clearQQLikedPlaylistCoverCache();
   clearKugouSessionCaches();
+  try {
+    if (kugouLiteSession && typeof kugouLiteSession.clearSession === 'function') {
+      kugouLiteSession.clearSession();
+    }
+  } catch (_) {}
   const qishui = clearQishuiAccessToken();
   const spotify = clearSpotifyToken();
   return {
@@ -423,6 +437,29 @@ function clearAllRuntimeLoginCredentials(reason) {
 }
 
 // ---------- 工具 ----------
+/** Allow missing Origin (same-origin / Electron / file) or localhost/127.0.0.1 only. */
+function isLocalOrMissingOrigin(origin) {
+  const raw = origin == null ? '' : String(origin).trim();
+  if (!raw) return true;
+  try {
+    const host = new URL(raw).hostname.toLowerCase();
+    return host === '127.0.0.1' || host === 'localhost';
+  } catch (_) {
+    return false;
+  }
+}
+function accessControlAllowOrigin(res) {
+  const origin = res && res.req && res.req.headers ? res.req.headers.origin : undefined;
+  if (!origin) return '*';
+  if (isLocalOrMissingOrigin(origin)) return String(origin);
+  return '';
+}
+function rejectIfNonLocalOrigin(req, res) {
+  const origin = req && req.headers ? req.headers.origin : undefined;
+  if (isLocalOrMissingOrigin(origin)) return false;
+  sendJSON(res, { error: 'ORIGIN_NOT_ALLOWED' }, 403);
+  return true;
+}
 function serveStatic(res, filePath) {
   const ext = path.extname(filePath);
   fs.readFile(filePath, (err, data) => {
@@ -437,13 +474,15 @@ function serveStatic(res, filePath) {
   });
 }
 function sendJSON(res, data, status) {
-  res.writeHead(status || 200, {
+  const headers = {
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
     'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
     'Pragma': 'no-cache',
     'Expires': '0',
-  });
+  };
+  const allow = accessControlAllowOrigin(res);
+  if (allow) headers['Access-Control-Allow-Origin'] = allow;
+  res.writeHead(status || 200, headers);
   res.end(JSON.stringify(data));
 }
 function readPackageInfo() {
@@ -4674,7 +4713,36 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (pn === '/api/app/version') {
+    if (pn === '/api/muhao-diag') {
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+    if (req.method !== 'POST') { sendJSON(res, { ok: false, error: 'method' }, 405); return; }
+    try {
+      var _os = require('os');
+      var _fs = require('fs');
+      var _path = require('path');
+      let body = '';
+      req.on('data', function (chunk) { body += chunk; if (body.length > 16000) body = body.slice(0, 16000); });
+      req.on('end', function () {
+        try {
+          var parsed = {};
+          try { parsed = JSON.parse(body || '{}'); } catch (eParse) { parsed = {}; }
+          var line = parsed && parsed.line != null ? String(parsed.line) : '';
+          line = line.replace(/[\r\n]+/g, ' ').slice(0, 4000);
+          if (!line) { sendJSON(res, { ok: false, error: 'empty' }, 400); return; }
+          var file = _path.join(_os.tmpdir(), 'muhao-beat-diag.log');
+          _fs.appendFile(file, line + '\n', function () {});
+          sendJSON(res, { ok: true, file: file });
+        } catch (eInner) {
+          sendJSON(res, { ok: false }, 500);
+        }
+      });
+    } catch (e) {
+      sendJSON(res, { ok: false }, 500);
+    }
+    return;
+  }
+
+if (pn === '/api/app/version') {
     sendJSON(res, {
       name: APP_PACKAGE.name || 'mineradio',
       productName: APP_PACKAGE.productName || 'Mineradio',
@@ -5310,13 +5378,43 @@ const server = http.createServer(async (req, res) => {
       const data = result && result.data || {};
       const errorCode = Number(data.error_code || 0);
       const bridgeStatus = qishuiQrLogin.getStatus();
-      if (bridgeStatus.loggedIn) {
+      // 只有桥接登录且二维码本轮被明确确认(status '3' + confirmed)才允许进入登录落盘流程；
+      // 旧 cookie / waiting / expired 等状态不得被误判为登录成功。
+      const qrConfirmed = String(data.status || '').trim() === '3' && data.confirmed === true;
+      if (bridgeStatus.loggedIn && qrConfirmed) {
         const cookie = qishuiQrLogin.getCookie();
         if (!qishuiCookieHasLogin(cookie)) throw new Error('QISHUI_QR_SESSION_COOKIE_MISSING');
+        // 先用刚取得的局部 cookie 校验账号状态，校验通过后再落盘，避免保存失效/待确认会话。
+        const accountStatus = await handleQishuiStatus(cookie);
+        if (accountStatus && accountStatus.reauthRequired) {
+          sendJSON(res, {
+            ...accountStatus,
+            provider: 'qishui',
+            loggedIn: false,
+            webSession: false,
+            cookieReady: false,
+            status: 'reauth_required',
+            errorCode,
+            error_code: errorCode,
+            message: accountStatus.message || '登录已失效，请重新扫码',
+          });
+          return;
+        }
+        if (accountStatus && !accountStatus.loggedIn && (accountStatus.stale === true || accountStatus.membershipStale === true)) {
+          sendJSON(res, {
+            ...accountStatus,
+            provider: 'qishui',
+            loggedIn: false,
+            status: 'verifying',
+            errorCode,
+            error_code: errorCode,
+            message: accountStatus.message || '登录状态确认中',
+          });
+          return;
+        }
         saveQishuiCookie(cookie);
-        const status = await handleQishuiStatus(qishuiCookie);
         sendJSON(res, {
-          ...status,
+          ...accountStatus,
           provider: 'qishui',
           ok: true,
           loggedIn: true,
@@ -5595,7 +5693,353 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (pn === '/api/kugou-concept/login/status') {
+    if (pn === '/api/kugou-lite/health') {
+    const base = process.env.MINERADIO_KUGOU_LITE_BASE || ('http://127.0.0.1:' + (process.env.MINERADIO_KUGOU_LITE_PORT || process.env.KUGOU_LITE_PORT || '17965'));
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const target = new URL('/', base);
+        const lib = target.protocol === 'https:' ? require('https') : require('http');
+        const req = lib.get({
+          hostname: target.hostname,
+          port: target.port,
+          path: '/',
+          timeout: 2500,
+          headers: { Host: target.host },
+        }, (res) => {
+          res.resume();
+          resolve({ ok: (res.statusCode || 0) > 0 && (res.statusCode || 0) < 500, httpStatus: res.statusCode || 0 });
+        });
+        req.on('error', reject);
+        req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+      });
+      sendJSON(res, {
+        ok: !!result.ok,
+        provider: 'kugou-lite',
+        platform: 'lite',
+        base,
+        httpStatus: result.httpStatus,
+        message: result.ok ? 'lite runtime reachable' : 'lite runtime unhealthy',
+      }, result.ok ? 200 : 503);
+    } catch (err) {
+      sendJSON(res, {
+        ok: false,
+        provider: 'kugou-lite',
+        platform: 'lite',
+        base,
+        error: err && err.message ? err.message : String(err),
+        message: 'lite runtime not reachable',
+      }, 503);
+    }
+    return;
+  }
+
+
+  if (pn === '/api/kugou-lite/login/qr/key') {
+    try {
+      const { result } = await kugouLiteSession.proxyLite('/login/qr/key', {});
+      const body = result.body || {};
+      const key = kugouLiteSession.extractQrKey(body);
+      sendJSON(res, {
+        provider: 'kugou-lite',
+        ok: !!key,
+        key,
+        qrcode: key,
+        data: body.data || body,
+        httpStatus: result.httpStatus,
+      }, key ? 200 : (result.httpStatus || 502));
+    } catch (err) {
+      sendJSON(res, { provider: 'kugou-lite', ok: false, error: err && err.message ? err.message : String(err) }, 503);
+    }
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/login/qr/create') {
+    try {
+      const key = url.searchParams.get('key') || url.searchParams.get('qrcode') || '';
+      if (!key) { sendJSON(res, { provider: 'kugou-lite', error: 'MISSING_KEY' }, 400); return; }
+      const qrimg = url.searchParams.get('qrimg') !== 'false';
+      const { result } = await kugouLiteSession.proxyLite('/login/qr/create', { key, qrimg: qrimg ? 'true' : '' });
+      const data = (result.body && result.body.data) || {};
+      const base64 = data.base64 || data.qrimg || '';
+      sendJSON(res, {
+        provider: 'kugou-lite',
+        ok: !!(base64 || data.url),
+        key,
+        url: data.url || '',
+        img: base64,
+        base64,
+        httpStatus: result.httpStatus,
+      }, (base64 || data.url) ? 200 : (result.httpStatus || 502));
+    } catch (err) {
+      sendJSON(res, { provider: 'kugou-lite', ok: false, error: err && err.message ? err.message : String(err) }, 503);
+    }
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/login/qr/check') {
+    try {
+      const key = url.searchParams.get('key') || url.searchParams.get('qrcode') || '';
+      if (!key) { sendJSON(res, { provider: 'kugou-lite', error: 'MISSING_KEY' }, 400); return; }
+      const { result } = await kugouLiteSession.proxyLite('/login/qr/check', { key });
+      const parsed = kugouLiteSession.extractCheck(result.body || {});
+      let loggedIn = false;
+      let statusInfo = null;
+      if (parsed.status === 4 && parsed.token && parsed.userid) {
+        kugouLiteSession.writeSession({
+          userid: parsed.userid,
+          token: parsed.token,
+          nickname: parsed.nickname || '酷狗概念版',
+          avatar: parsed.avatar || '',
+        });
+        loggedIn = true;
+        statusInfo = kugouLiteSession.publicStatus();
+      }
+      const statusLabel = parsed.status === 0 ? 'expired'
+        : parsed.status === 1 ? 'waiting'
+        : parsed.status === 2 ? 'scanned'
+        : parsed.status === 4 ? 'success'
+        : 'unknown';
+      sendJSON(res, {
+        provider: 'kugou-lite',
+        ok: true,
+        key,
+        status: parsed.status,
+        statusLabel,
+        loggedIn,
+        message: parsed.message || (
+          statusLabel === 'waiting' ? '等待扫码'
+          : statusLabel === 'scanned' ? '已扫码，请在手机确认'
+          : statusLabel === 'success' ? '登录成功'
+          : statusLabel === 'expired' ? '二维码已过期'
+          : '未知状态'
+        ),
+        userId: loggedIn ? statusInfo.userId : undefined,
+        nickname: loggedIn ? statusInfo.nickname : undefined,
+        httpStatus: result.httpStatus,
+      });
+    } catch (err) {
+      sendJSON(res, { provider: 'kugou-lite', ok: false, error: err && err.message ? err.message : String(err) }, 503);
+    }
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/login/status') {
+    sendJSON(res, kugouLiteSession.publicStatus());
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/logout') {
+    sendJSON(res, kugouLiteSession.clearSession());
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/search') {
+    if (rejectIfNonLocalOrigin(req, res)) return;
+    try {
+      const kw = url.searchParams.get('keywords') || url.searchParams.get('keyword') || '';
+      const limit = Math.max(4, Math.min(20, parseInt(url.searchParams.get('limit') || '12', 10) || 12));
+      const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0);
+      const data = await kugouLiteMedia.handleLiteSearch(kw, limit, offset);
+      sendJSON(res, data);
+    } catch (err) {
+      console.error('[KugouLiteSearch]', err && err.message ? err.message : err);
+      sendJSON(res, { provider: 'kugou-lite', platform: 'lite', error: err && err.message ? err.message : String(err), songs: [] }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/song/url') {
+    if (rejectIfNonLocalOrigin(req, res)) return;
+    try {
+      const info = await kugouLiteMedia.handleLiteSongUrl({
+        hash: url.searchParams.get('hash') || url.searchParams.get('id') || '',
+        albumId: url.searchParams.get('albumId') || url.searchParams.get('album_id') || '',
+        albumAudioId: url.searchParams.get('albumAudioId') || url.searchParams.get('album_audio_id') || url.searchParams.get('mixSongId') || '',
+        mixSongId: url.searchParams.get('mixSongId') || '',
+        hqHash: url.searchParams.get('hqHash') || url.searchParams.get('hq_hash') || '',
+        sqHash: url.searchParams.get('sqHash') || url.searchParams.get('sq_hash') || '',
+        resHash: url.searchParams.get('resHash') || url.searchParams.get('res_hash') || '',
+        quality: url.searchParams.get('quality') || url.searchParams.get('level') || url.searchParams.get('br') || url.searchParams.get('bitrate') || '',
+        level: url.searchParams.get('level') || '',
+        br: url.searchParams.get('br') || url.searchParams.get('bitrate') || '',
+      });
+      const code = info && info.error === 'KUGOU_LITE_LOGIN_REQUIRED' ? 401
+        : (info && info.playable === false && info.error === 'KUGOU_LITE_VIP_REQUIRED' ? 403
+          : 200);
+      sendJSON(res, info, code);
+    } catch (err) {
+      const code = err && err.code === 'KUGOU_LITE_LOGIN_REQUIRED' ? 401 : 500;
+      console.error('[KugouLiteSongUrl]', err && err.message ? err.message : err);
+      sendJSON(res, Object.assign(kugouLiteMedia.loginRequiredPayload(), {
+        error: err && err.code ? err.code : (err && err.message ? err.message : String(err)),
+        message: err && err.message ? err.message : '酷狗概念版播放地址获取失败',
+      }), code);
+    }
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/lyric') {
+    if (rejectIfNonLocalOrigin(req, res)) return;
+    try {
+      const hash = url.searchParams.get('hash') || url.searchParams.get('id') || '';
+      const albumAudioId = url.searchParams.get('albumAudioId') || url.searchParams.get('album_audio_id') || '';
+      const duration = url.searchParams.get('duration') || '';
+      if (!hash) { sendJSON(res, { provider: 'kugou-lite', platform: 'lite', error: 'Missing Kugou hash', lyric: '' }, 400); return; }
+      const data = await kugouLiteMedia.handleLiteLyric(hash, albumAudioId, duration);
+      sendJSON(res, data);
+    } catch (err) {
+      console.error('[KugouLiteLyric]', err && err.message ? err.message : err);
+      sendJSON(res, { provider: 'kugou-lite', platform: 'lite', error: err && err.message ? err.message : String(err), lyric: '' }, 500);
+    }
+    return;
+  }
+
+
+
+
+  if (pn === '/api/kugou-lite/user/playlists') {
+    if (rejectIfNonLocalOrigin(req, res)) return;
+    try {
+      const data = await kugouLiteMedia.handleLiteUserPlaylists({});
+      const code = data && data.error === 'KUGOU_LITE_LOGIN_REQUIRED' ? 401 : 200;
+      sendJSON(res, data, code);
+    } catch (err) {
+      console.error('[KugouLiteUserPlaylists]', err && err.message ? err.message : err);
+      sendJSON(res, { provider: 'kugou-lite', platform: 'lite', loggedIn: false, error: err && err.message ? err.message : String(err), playlists: [] }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/playlist/tracks') {
+    if (rejectIfNonLocalOrigin(req, res)) return;
+    try {
+      const id = url.searchParams.get('id') || url.searchParams.get('listid') || url.searchParams.get('global_collection_id') || '';
+      const paged = url.searchParams.has('limit') || url.searchParams.has('offset');
+      const limit = Math.max(10, Math.min(50, parseInt(url.searchParams.get('limit') || '50', 10) || 50));
+      const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0);
+      const data = await kugouLiteMedia.handleLitePlaylistTracks(id, paged ? { limit, offset, paged: true } : {});
+      const code = data && data.error === 'KUGOU_LITE_LOGIN_REQUIRED' ? 401 : 200;
+      sendJSON(res, data, code);
+    } catch (err) {
+      console.error('[KugouLitePlaylistTracks]', err && err.message ? err.message : err);
+      sendJSON(res, { provider: 'kugou-lite', platform: 'lite', error: err && err.message ? err.message : String(err), tracks: [] }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/song/like/check') {
+    if (rejectIfNonLocalOrigin(req, res)) return;
+    try {
+      const hashes = url.searchParams.get('hashes') || url.searchParams.get('hash') || '';
+      const mixsongids = url.searchParams.get('mixsongids') || '';
+      const data = await kugouLiteMedia.handleLiteLikeCheck({ hashes, mixsongids });
+      const code = data && data.error === 'KUGOU_LITE_LOGIN_REQUIRED' ? 401 : 200;
+      sendJSON(res, data, code);
+    } catch (err) {
+      console.error('[KugouLiteLikeCheck]', err && err.message ? err.message : err);
+      sendJSON(res, { provider: 'kugou-lite', liked: {}, error: err && err.message ? err.message : String(err) }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/song/like') {
+    if (rejectIfNonLocalOrigin(req, res)) return;
+    try {
+      if (req.method !== 'POST') { sendJSON(res, { provider: 'kugou-lite', success: false, error: 'METHOD_NOT_ALLOWED' }, 405); return; }
+      const body = await readRequestBody(req);
+      const song = body.song || {};
+      const like = String(body.like != null ? body.like : 'true') !== 'false';
+      const data = await kugouLiteMedia.handleLiteLikeToggle(song, like);
+      const code = data && data.error === 'KUGOU_LITE_LOGIN_REQUIRED' ? 401 : 200;
+      sendJSON(res, data, code);
+    } catch (err) {
+      console.error('[KugouLiteLike]', err && err.message ? err.message : err);
+      sendJSON(res, { provider: 'kugou-lite', success: false, error: err && err.message ? err.message : String(err) }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/playlist/add-song') {
+    if (rejectIfNonLocalOrigin(req, res)) return;
+    try {
+      if (req.method !== 'POST') { sendJSON(res, { provider: 'kugou-lite', success: false, error: 'METHOD_NOT_ALLOWED' }, 405); return; }
+      const body = await readRequestBody(req);
+      const pid = body.pid || body.listid || body.id || '';
+      const song = body.song || body;
+      if (!pid) { sendJSON(res, { provider: 'kugou-lite', success: false, error: 'Missing playlist id' }, 400); return; }
+      const data = await kugouLiteMedia.handleLitePlaylistAddSong(pid, song);
+      const code = data && data.error === 'KUGOU_LITE_LOGIN_REQUIRED' ? 401 : 200;
+      sendJSON(res, data, code);
+    } catch (err) {
+      console.error('[KugouLitePlaylistAddSong]', err && err.message ? err.message : err);
+      sendJSON(res, { provider: 'kugou-lite', success: false, error: err && err.message ? err.message : String(err) }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/playlist/create') {
+    if (rejectIfNonLocalOrigin(req, res)) return;
+    try {
+      if (req.method !== 'POST') { sendJSON(res, { provider: 'kugou-lite', success: false, error: 'METHOD_NOT_ALLOWED' }, 405); return; }
+      const body = await readRequestBody(req);
+      const data = await kugouLiteMedia.handleLitePlaylistCreate({ name: body.name || '' });
+      const code = data && data.error === 'KUGOU_LITE_LOGIN_REQUIRED' ? 401 : 200;
+      sendJSON(res, data, code);
+    } catch (err) {
+      console.error('[KugouLitePlaylistCreate]', err && err.message ? err.message : err);
+      sendJSON(res, { provider: 'kugou-lite', success: false, error: err && err.message ? err.message : String(err) }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/playlist/remove-song') {
+    if (rejectIfNonLocalOrigin(req, res)) return;
+    try {
+      if (req.method !== 'POST') { sendJSON(res, { provider: 'kugou-lite', success: false, error: 'METHOD_NOT_ALLOWED' }, 405); return; }
+      const body = await readRequestBody(req);
+      const pid = body.pid || body.listid || body.id || '';
+      const song = body.song || body;
+      if (!pid) { sendJSON(res, { provider: 'kugou-lite', success: false, error: 'Missing playlist id' }, 400); return; }
+      const data = await kugouLiteMedia.handleLitePlaylistRemoveSong(pid, song);
+      const code = data && data.error === 'KUGOU_LITE_LOGIN_REQUIRED' ? 401 : 200;
+      sendJSON(res, data, code);
+    } catch (err) {
+      console.error('[KugouLitePlaylistRemoveSong]', err && err.message ? err.message : err);
+      sendJSON(res, { provider: 'kugou-lite', success: false, error: err && err.message ? err.message : String(err) }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/kugou-lite/recommendations') {
+    if (rejectIfNonLocalOrigin(req, res)) return;
+    try {
+      const limit = Math.max(4, Math.min(20, parseInt(url.searchParams.get('limit') || '12', 10) || 12));
+      const data = await kugouLiteMedia.handleLiteRecommendations(limit);
+      const code = data && data.error === 'KUGOU_LITE_LOGIN_REQUIRED' ? 401 : 200;
+      try {
+        const dbg = {
+          at: new Date().toISOString(),
+          origin: req.headers.origin || '',
+          referer: req.headers.referer || '',
+          limit,
+          endpoint: data && data.endpoint,
+          source: data && data.source,
+          mode: data && data.mode,
+          n: data && Array.isArray(data.songs) ? data.songs.length : 0,
+          sample: data && Array.isArray(data.songs) ? data.songs.slice(0, 5).map((s) => s && s.name) : [],
+        };
+        const dbgPath = require('path').join(require('os').tmpdir(), 'muhaoradio-rec-debug.jsonl');
+        require('fs').appendFileSync(dbgPath, JSON.stringify(dbg) + '\n');
+      } catch (_dbgLogErr) {}
+      sendJSON(res, data, code);
+    } catch (err) {
+      console.error('[KugouLiteRecommendations]', err && err.message ? err.message : err);
+      sendJSON(res, { provider: 'kugou-lite', songs: [], error: err && err.message ? err.message : String(err) }, 500);
+    }
+    return;
+  }
+
+if (pn === '/api/kugou-concept/login/status') {
     sendJSON(res, {
       provider: 'kugou-concept',
       loggedIn: !!kugouConceptCookie,
@@ -6738,8 +7182,15 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  let filePath = pn === '/' ? '/index.html' : pn;
-  filePath = path.join(__dirname, 'public', filePath);
+  let filePath = pn === '/' ? 'index.html' : String(pn).replace(/^[/\\]+/, '');
+  const publicRoot = path.resolve(__dirname, 'public');
+  filePath = path.resolve(publicRoot, filePath);
+  const relToPublic = path.relative(publicRoot, filePath);
+  if (relToPublic.startsWith('..') || path.isAbsolute(relToPublic)) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
   serveStatic(res, filePath);
 });
 

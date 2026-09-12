@@ -3,13 +3,18 @@ var firstPlayDone = false;
 function playbackProviderLabel(song) {
   var provider = songProviderKey(song);
   if (provider === 'qq') return 'QQ 音乐';
+  if (provider === 'kugou-lite') return '酷狗概念版';
   if (provider === 'kugou') return '酷狗音乐';
   if (provider === 'qishui') return '汽水音乐';
   if (provider === 'spotify') return 'Spotify';
   return '网易云';
 }
 function playbackLoginProvider(song) {
-  return normalizePlaybackProvider(songProviderKey(song));
+  if (typeof preferKugouLitePlayback === 'function' && preferKugouLitePlayback(song)) return 'kugou-lite';
+  if (typeof shouldRematchPlaybackViaKugouLite === 'function' && shouldRematchPlaybackViaKugouLite(song)) return 'kugou-lite';
+  var key = songProviderKey(song);
+  if (key === 'kugou-lite') return 'kugou-lite';
+  return normalizePlaybackProvider(key);
 }
 function playbackRestrictionRawCategory(song, data) {
   data = data || {};
@@ -300,7 +305,7 @@ function isSameTitleArtist(source, candidate) {
   return a.some(function (name) { return b.indexOf(name) >= 0; });
 }
 var SOURCE_FALLBACK_SEARCH_TIMEOUT_MS = 6500;
-var SOURCE_FALLBACK_DIRECT_PROVIDERS = ['netease', 'qq', 'kugou'];
+var SOURCE_FALLBACK_DIRECT_PROVIDERS = ['netease', 'qq', 'kugou', 'kugou-lite'];
 var SOURCE_FALLBACK_RECOVERY_TIMEOUT_MS = 20000;
 var SOURCE_FALLBACK_MAX_QUEUE_ADVANCES = 2;
 var SOURCE_FALLBACK_MAX_PROVIDER_ATTEMPTS = 4;
@@ -456,30 +461,43 @@ function awaitSourceFallbackBudget(promise, recovery) {
 
 function sourceFallbackProviderTitle(provider) {
   if (provider === 'qq') return 'QQ 音乐';
+  if (provider === 'kugou-lite') return '酷狗概念版';
   if (provider === 'kugou') return '酷狗音乐';
   return '网易云';
 }
+function sourceFallbackNormalizeProvider(provider) {
+  return provider === 'kugou-lite' ? 'kugou-lite' : normalizePlaybackProvider(provider);
+}
 function sourceFallbackProviderReady(provider) {
-  provider = normalizePlaybackProvider(provider);
+  provider = sourceFallbackNormalizeProvider(provider);
   if (SOURCE_FALLBACK_DIRECT_PROVIDERS.indexOf(provider) < 0) return false;
   var status = typeof platformStatus === 'function' ? platformStatus(provider) : null;
   if (!status || !status.loggedIn) return false;
+  if (provider === 'kugou-lite') return status.playbackKeyReady !== false;
   if (provider === 'qq' || provider === 'kugou') return status.playbackKeyReady === true;
   return true;
 }
 function alternatePlaybackProviders(song) {
-  var currentProvider = normalizePlaybackProvider(songProviderKey(song));
+  var currentProvider = sourceFallbackNormalizeProvider(songProviderKey(song));
   var ordered = typeof accountProviderOrder === 'function'
     ? accountProviderOrder()
     : SOURCE_FALLBACK_DIRECT_PROVIDERS.slice();
   var seen = {};
   var providers = [];
   ordered.concat(SOURCE_FALLBACK_DIRECT_PROVIDERS).forEach(function (provider) {
-    provider = normalizePlaybackProvider(provider);
+    provider = sourceFallbackNormalizeProvider(provider);
     if (seen[provider] || provider === currentProvider || !sourceFallbackProviderReady(provider)) return;
     seen[provider] = true;
     providers.push(provider);
   });
+  // When 概念版 is active/logged-in, try lite rematch before other platforms.
+  if (
+    (typeof kugouLiteIsActiveAccount === 'function' ? kugouLiteIsActiveAccount() : (typeof activeAccountProvider !== 'undefined' && activeAccountProvider === 'kugou-lite'))
+    || (typeof kugouLiteSessionLoggedIn === 'function' ? kugouLiteSessionLoggedIn() : false)
+  ) {
+    providers = providers.filter(function (p) { return p !== 'kugou-lite'; });
+    if (sourceFallbackProviderReady('kugou-lite') && currentProvider !== 'kugou-lite') providers.unshift('kugou-lite');
+  }
   return providers;
 }
 function alternatePlaybackProvider(song) {
@@ -494,9 +512,11 @@ async function searchAlternatePlatformSong(song, requestedTarget, recovery) {
   if (!query) return null;
   var url = target === 'qq'
     ? '/api/qq/search?keywords=' + encodeURIComponent(query) + '&limit=8'
-    : (target === 'kugou'
-      ? '/api/kugou/search?keywords=' + encodeURIComponent(query) + '&limit=8'
-      : '/api/search?keywords=' + encodeURIComponent(query) + '&limit=12');
+    : (target === 'kugou-lite'
+      ? '/api/kugou-lite/search?keywords=' + encodeURIComponent(query) + '&limit=8'
+      : (target === 'kugou'
+        ? '/api/kugou/search?keywords=' + encodeURIComponent(query) + '&limit=8'
+        : '/api/search?keywords=' + encodeURIComponent(query) + '&limit=12'));
   var data = await awaitSourceFallbackBudget(
     apiJson(url, { timeoutMs: SOURCE_FALLBACK_SEARCH_TIMEOUT_MS }),
     recovery

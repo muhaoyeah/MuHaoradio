@@ -77,14 +77,19 @@ function onUserBtnClick() {
   }
   showLoginModal({ provider: hasAnyPlatformLogin() ? firstLoggedProvider() : loginProvider, source: 'top-account' });
 }
-var ACCOUNT_PROVIDER_KEYS = ['netease', 'qq', 'kugou', 'qishui', 'spotify'];
+var ACCOUNT_PROVIDER_KEYS = ['netease', 'qq', 'kugou', 'kugou-lite', 'qishui', 'spotify'];
 var ACCOUNT_PROVIDER_ORDER_STORE_KEY = 'mineradio-account-provider-order-v1';
 var ACCOUNT_PROVIDER_VISIBLE_STORE_KEY = 'mineradio-account-provider-visible-v1';
 var topAccountPillDrag = null;
 var topAccountPillClickSuppressed = false;
 
 function normalizeAccountProviderKey(provider) {
-  return provider === 'qq' ? 'qq' : (provider === 'kugou' ? 'kugou' : (provider === 'qishui' ? 'qishui' : (provider === 'spotify' ? 'spotify' : 'netease')));
+  if (provider === 'qq') return 'qq';
+  if (provider === 'kugou-lite') return 'kugou-lite';
+  if (provider === 'kugou') return 'kugou';
+  if (provider === 'qishui') return 'qishui';
+  if (provider === 'spotify') return 'spotify';
+  return 'netease';
 }
 function normalizeAccountProviderList(list) {
   var seen = {};
@@ -220,6 +225,7 @@ function syncAccountProviderOrderUi() {
 function platformMeta(provider) {
   if (provider === 'qq') return { key: 'qq', short: 'QQ', label: 'QQ 音乐', app: 'QQ 音乐 App', dot: 'qq' };
   if (provider === 'kugou') return { key: 'kugou', short: 'KG', label: '酷狗音乐', app: '酷狗音乐 App', dot: 'kugou' };
+  if (provider === 'kugou-lite') return { key: 'kugou-lite', short: '概念', label: '酷狗概念版', app: '酷狗概念版 App', dot: 'kugou' };
   if (provider === 'qishui') return { key: 'qishui', short: 'QS', label: '汽水音乐', app: '汽水音乐 App', dot: 'qishui' };
   if (provider === 'spotify') return { key: 'spotify', short: 'SP', label: 'Spotify', app: 'Spotify', dot: 'spotify' };
   return { key: 'netease', short: 'NE', label: '网易云音乐', app: '网易云音乐 App', dot: 'netease' };
@@ -227,6 +233,7 @@ function platformMeta(provider) {
 function platformStatus(provider) {
   if (provider === 'spotify') return spotifyLoginStatus;
   if (provider === 'qishui') return qishuiLoginStatus;
+  if (provider === 'kugou-lite') return kugouLiteLoginStatus;
   if (provider === 'kugou') return kugouLoginStatus;
   return provider === 'qq' ? qqLoginStatus : loginStatus;
 }
@@ -280,7 +287,7 @@ function hasPlatformLogin(provider) {
   return !!(st && st.loggedIn);
 }
 function hasAnyPlatformLogin() {
-  return hasPlatformLogin('netease') || hasPlatformLogin('qq') || hasPlatformLogin('kugou') || hasPlatformLogin('qishui') || hasPlatformLogin('spotify');
+  return hasPlatformLogin('netease') || hasPlatformLogin('qq') || hasPlatformLogin('kugou') || hasPlatformLogin('kugou-lite') || hasPlatformLogin('qishui') || hasPlatformLogin('spotify');
 }
 function firstLoggedProvider() {
   if (hasPlatformLogin(activeAccountProvider)) return activeAccountProvider;
@@ -294,24 +301,33 @@ function providerAvatarSrc(provider, status) {
   status = status || platformStatus(provider) || {};
   if (status.avatar) return avatarSrc(status.avatar);
   var meta = platformMeta(provider);
-  var fill = provider === 'qq' ? '#bfd66b' : (provider === 'kugou' ? '#56e0ff' : (provider === 'qishui' ? '#45d68f' : (provider === 'spotify' ? '#1ed760' : '#d95b67')));
-  var bg = provider === 'qq' ? '#11150b' : (provider === 'kugou' ? '#071722' : (provider === 'qishui' ? '#071a12' : (provider === 'spotify' ? '#06140a' : '#180b0f')));
+  var fill = provider === 'qq' ? '#bfd66b' : ((provider === 'kugou' || provider === 'kugou-lite') ? '#56e0ff' : (provider === 'qishui' ? '#45d68f' : (provider === 'spotify' ? '#1ed760' : '#d95b67')));
+  var bg = provider === 'qq' ? '#11150b' : ((provider === 'kugou' || provider === 'kugou-lite') ? '#071722' : (provider === 'qishui' ? '#071a12' : (provider === 'spotify' ? '#06140a' : '#180b0f')));
   var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><rect width="96" height="96" rx="48" fill="' + bg + '"/><circle cx="48" cy="48" r="34" fill="' + fill + '" opacity=".16"/><text x="48" y="56" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="700" fill="' + fill + '">' + meta.short + '</text></svg>';
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
+function providerMembershipNeedsSync(provider, status) {
+  if (!status || !status.loggedIn) return false;
+  if (provider === 'qq') return !!(
+    (typeof qqLoginNeedsAuthorizationRefresh === 'function' && qqLoginNeedsAuthorizationRefresh(status)) ||
+    (typeof qqMembershipNeedsSync === 'function' && qqMembershipNeedsSync(status))
+  );
+  // Keep MuHao kugou-lite on stale flags only — it has no membershipVerified probe.
+  if (provider === 'kugou-lite') return !!(status.stale || status.membershipStale);
+  if (provider === 'kugou') return !!(status.stale || status.membershipStale || status.membershipVerified !== true);
+  if (provider === 'qishui') return !!(status.stale || status.membershipStale || status.membershipKnown !== true);
+  return false;
 }
 function providerVipBadge(provider, status, idAttr, includeNormal) {
   status = status || platformStatus(provider) || {};
   if (!status.loggedIn) return '';
-  var pendingQQSync = provider === 'qq' && (
-    (typeof qqLoginNeedsAuthorizationRefresh === 'function' && qqLoginNeedsAuthorizationRefresh(status)) ||
-    (typeof qqMembershipNeedsSync === 'function' && qqMembershipNeedsSync(status))
-  );
+  var pendingSync = providerMembershipNeedsSync(provider, status);
   var level = providerVipLevel(provider, status);
-  if (level === 'none' && !includeNormal && !pendingQQSync) return '';
+  if (level === 'none' && !includeNormal && !pendingSync) return '';
   var id = idAttr ? ' id="' + idAttr + '"' : '';
-  var badgeLevel = pendingQQSync ? 'pending' : (level === 'none' ? 'normal' : level);
+  var badgeLevel = pendingSync ? 'pending' : (level === 'none' ? 'normal' : level);
   var cls = 'top-account-vip ' + escHtml(provider || 'netease') + ' ' + badgeLevel;
-  var label = pendingQQSync ? '待同步' : (level === 'svip' ? 'SVIP' : (level === 'vip' ? 'VIP' : '普通'));
+  var label = pendingSync ? '待同步' : (level === 'svip' ? 'SVIP' : (level === 'vip' ? 'VIP' : '普通'));
   return '<span' + id + ' class="' + cls + '">' + label + '</span>';
 }
 function providerAccountIdentity(provider, status) {
@@ -395,7 +411,7 @@ function bindTopAccountPillSorting() {
     if (!topAccountPillDrag) return;
     var dx = e.clientX - topAccountPillDrag.startX;
     var dy = e.clientY - topAccountPillDrag.startY;
-    if (!topAccountPillDrag.dragging && Math.sqrt(dx * dx + dy * dy) < 7) return;
+    if (!topAccountPillDrag || (!topAccountPillDrag.dragging && Math.sqrt(dx * dx + dy * dy) < 7)) return;
     topAccountPillDrag.dragging = true;
     topAccountPillClickSuppressed = true;
     btn.classList.add('pill-sorting');
