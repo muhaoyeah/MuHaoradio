@@ -35,11 +35,6 @@ function normalizeCustomBackgroundMedia(value) {
   }
   return null;
 }
-function customBackgroundMediaLabel(media) {
-  media = normalizeCustomBackgroundMedia(media);
-  if (!media) return '未设置';
-  return media.type === 'video' ? '视频已设置' : '图片已设置';
-}
 function customBackgroundUsesAlbumCover() {
   return typeof fx !== 'undefined' && !!(fx && fx.backgroundAlbumCover === true);
 }

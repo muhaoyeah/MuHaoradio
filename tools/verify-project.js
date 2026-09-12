@@ -111,7 +111,7 @@ else {
     }
   }
 
-  /* A3 顶层 const/let 重名 */
+  /* A3 顶层 const/let 重名（function/var 重名由 A4 检查） */
   const decls = {};
   for (const rel of order) {
     const abs = path.join(ROOT, 'public', rel);
@@ -121,6 +121,19 @@ else {
   const dup = Object.entries(decls).filter(([, w]) => w.length > 1);
   if (dup.length === 0) pass('A3 顶层 const/let 无重名');
   else { fail('A3 顶层 const/let 重名 ' + dup.length + ' 组（会导致 bundle SyntaxError）'); dup.slice(0, 10).forEach(([n, w]) => info(n + ' ← ' + w.join(' | '))); }
+
+  /* A4 顶层 function/var 重名（后者静默覆盖前者，不报错、只出错） */
+  const fdecls = {};
+  for (const rel of order) {
+    const abs = path.join(ROOT, 'public', rel);
+    if (!fs.existsSync(abs)) continue;
+    const code = read(abs);
+    for (const m of code.matchAll(/^function\s+([A-Za-z_$][\w$]*)\s*\(/gm)) (fdecls[m[1]] = fdecls[m[1]] || []).push(rel);
+    for (const m of code.matchAll(/^var\s+([A-Za-z_$][\w$]*)\s*=/gm)) (fdecls[m[1]] = fdecls[m[1]] || []).push(rel + ' (var)');
+  }
+  const fdup = Object.entries(fdecls).filter(([, w]) => w.length > 1);
+  if (fdup.length === 0) pass('A4 顶层 function/var 无重名');
+  else { fail('A4 顶层 function/var 重名 ' + fdup.length + ' 组（后者静默覆盖前者，不报错）'); fdup.slice(0, 20).forEach(([n, w]) => info(n + ' ← ' + w.join(' | '))); }
 }
 
 /* ================= B. 引用完整性 ================= */
