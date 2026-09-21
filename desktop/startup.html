@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -6,88 +6,183 @@
   <title>MuHao Radio</title>
   <style>
     :root { color-scheme: dark; }
+    /*
+      Layer-1: outside → inside reveal of the ink plate.
+      Strong radial wipe (rim first, then toward MuHao), soft ink frontier.
+      No RADIO. Index vines untouched.
+    */
     * { box-sizing: border-box; }
     html, body {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      overflow: hidden;
-      background: #000;
+      width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000;
     }
     body {
-      user-select: none;
-      cursor: default;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
+      user-select: none; cursor: default; position: relative;
+      background: #000;
     }
-    .startup-shell-mark {
-      position: relative;
-      z-index: 2;
-      font-family: "Inter", "Noto Sans SC", system-ui, sans-serif;
-      font-size: clamp(28px, 5vw, 48px);
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      color: #fff;
-      opacity: 0.4;
-      pointer-events: none;
-      user-select: none;
+    .plate {
+      position: absolute; inset: 0; z-index: 0; pointer-events: none;
+      background: #050505 url("./assets/muhao-ink-startup.png") center / cover no-repeat;
+      opacity: 0;
     }
-    .startup-warm-slit {
-      position: absolute;
-      inset: -25%;
-      z-index: 1;
-      pointer-events: none;
-      overflow: hidden;
-    }
-    .startup-warm-slit::before {
-      content: '';
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 140vmax;
-      height: 1.4px;
-      margin-left: -70vmax;
-      margin-top: -0.7px;
-      background: linear-gradient(90deg,
-        transparent 0%,
-        rgba(255, 255, 255, 0) 28%,
-        rgba(255, 255, 255, 0.05) 42%,
-        rgba(255, 255, 255, 0.16) 50%,
-        rgba(244, 210, 138, 0.07) 57%,
-        rgba(255, 255, 255, 0) 70%,
-        transparent 100%);
-      box-shadow:
-        0 0 10px 1px rgba(255, 255, 255, 0.06),
-        0 0 28px 6px rgba(244, 210, 138, 0.03);
-      transform: rotate(-34deg) translate3d(0, 0, 0);
-      opacity: 0.35;
-      animation: startup-warm-slit-breathe 7.5s ease-in-out infinite;
-      will-change: opacity, transform;
-    }
-    @keyframes startup-warm-slit-breathe {
-      0%, 100% {
-        opacity: 0.22;
-        transform: rotate(-34deg) translate3d(-2%, 1.5%, 0);
-      }
-      50% {
-        opacity: 0.55;
-        transform: rotate(-34deg) translate3d(2%, -1.5%, 0);
-      }
+    #reveal {
+      position: absolute; inset: 0; z-index: 1;
+      width: 100%; height: 100%; pointer-events: none;
     }
     @media (prefers-reduced-motion: reduce) {
-      .startup-warm-slit::before {
-        animation: none;
-        opacity: 0.32;
-        transform: rotate(-34deg);
-      }
+      .plate { opacity: 1 !important; }
+      #reveal { display: none; }
     }
   </style>
 </head>
 <body>
-  <!-- MuHao outer shell layer-1 darkroom warm-up: black + MuHao@0.4 + weak slit breathe. No loading copy. -->
-  <div class="startup-warm-slit" aria-hidden="true"></div>
-  <div class="startup-shell-mark" aria-hidden="true">MuHao</div>
+  <div class="plate" id="plate" role="img" aria-label="MuHao"></div>
+  <canvas id="reveal" aria-hidden="true"></canvas>
+  <script>
+(function () {
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var plate = document.getElementById("plate");
+  var canvas = document.getElementById("reveal");
+  if (reduce) {
+    if (plate) plate.style.opacity = "1";
+    return;
+  }
+  if (!canvas || !plate) return;
+
+  var ctx = canvas.getContext("2d", { alpha: true });
+  if (!ctx) {
+    plate.style.opacity = "1";
+    return;
+  }
+
+  // Preload plate into Image for canvas reveal (crisper than CSS+mask alone)
+  var img = new Image();
+  img.src = "./assets/muhao-ink-startup.png";
+
+  var dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  var W = 0, H = 0;
+  var start = 0;
+  var raf = 0;
+  // Match main.js shell hold (~3.2s): fill most of the wait with reveal animation
+  var DURATION = 3000;
+  var EASE = function (t) {
+    // decelerate into the mark (premium)
+    return 1 - Math.pow(1 - t, 3);
+  };
+
+  function resize() {
+    W = Math.max(1, window.innerWidth);
+    H = Math.max(1, window.innerHeight);
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function drawCover() {
+    // Draw plate full-bleed covering window
+    if (!img.complete || !img.naturalWidth) {
+      ctx.fillStyle = "#050505";
+      ctx.fillRect(0, 0, W, H);
+      return;
+    }
+    var iw = img.naturalWidth, ih = img.naturalHeight;
+    var scale = Math.max(W / iw, H / ih);
+    var dw = iw * scale, dh = ih * scale;
+    var dx = (W - dw) / 2, dy = (H - dh) / 2;
+    ctx.drawImage(img, dx, dy, dw, dh);
+  }
+
+  function frame(now) {
+    if (!start) start = now;
+    var t = Math.min(1, (now - start) / DURATION);
+    var p = EASE(t);
+
+    // Outside → inside: visible where distFromCenter >= r
+    // r goes from Rmax (only thin rim) → 0 (full plate)
+    var cx = W * 0.5, cy = H * 0.48;
+    var Rmax = Math.sqrt(cx * cx + Math.max(cy, H - cy) * Math.max(cy, H - cy)) * 1.05;
+    var r = Rmax * (1 - p);
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    // 1) base black
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H);
+
+    // 2) plate clipped to outside of radius r (annulus / expanding inward)
+    ctx.save();
+    ctx.beginPath();
+    // Full rect path, then cut inner ellipse as hole using evenodd
+    ctx.rect(0, 0, W, H);
+    var rx = r * (W / Math.min(W, H));
+    var ry = r * (H / Math.min(W, H)) * 0.72;
+    // Keep elliptical to match 16:9 stage
+    rx = r * 1.15;
+    ry = r * 0.78;
+    if (r > 0.5) {
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.clip("evenodd");
+    }
+    drawCover();
+    ctx.restore();
+
+    // 3) soft ink frontier along the reveal edge (readable motion) — strengthened
+    if (r > 2 && t < 0.98) {
+      ctx.save();
+      var band = Math.max(32, Math.min(W, H) * 0.09);
+      // Soft dark ring just inside the frontier (wet edge)
+      var g = ctx.createRadialGradient(cx, cy, Math.max(0, r - band), cx, cy, r + band * 0.35);
+      g.addColorStop(0, "rgba(0,0,0,0)");
+      g.addColorStop(0.4, "rgba(0,0,0,0)");
+      g.addColorStop(0.68, "rgba(18,12,6,0.52)");
+      g.addColorStop(0.85, "rgba(26,18,10,0.28)");
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+
+      // Thin bright paper edge catch (warm, visible)
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(236,224,196,0.22)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (t < 1) {
+      raf = requestAnimationFrame(frame);
+    } else {
+      // Smooth handoff: fade in CSS plate, then clear canvas
+      plate.style.transition = "opacity .2s ease";
+      plate.style.opacity = "1";
+      setTimeout(function () {
+        ctx.clearRect(0, 0, W, H);
+      }, 220);
+    }
+  }
+
+  function boot() {
+    resize();
+    plate.style.opacity = "0";
+    start = 0;
+    raf = requestAnimationFrame(frame);
+  }
+
+  window.addEventListener("resize", function () {
+    resize();
+  });
+
+  if (img.complete && img.naturalWidth) boot();
+  else {
+    img.onload = boot;
+    img.onerror = function () {
+      plate.style.opacity = "1";
+    };
+  }
+})();
+  </script>
 </body>
 </html>

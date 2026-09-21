@@ -35,6 +35,7 @@ const {
   exchangeSpotifyOAuthCode,
   clearSpotifyToken,
 } = require('../spotify-api');
+const credentialCrypto = require('./credential-crypto');
 
 registerWallpaperEngineScheme(protocol);
 registerLocalMusicScheme(protocol);
@@ -164,7 +165,9 @@ const INITIAL_CACHE_SETTINGS = ensureCacheDirectories(readCacheSettings());
 const loginEasterEggGate = new LoginEasterEggGate({
   userDataPath: STABLE_USER_DATA_PATH,
   credentialRoots: () => [
-    chromiumSessionDataPath(cacheSettings || INITIAL_CACHE_SETTINGS),
+    chromiumSessionDataPath(),
+    // 旧位置（用户可选缓存根）也要继续可见，便于迁移历史登录态。
+    legacyChromiumSessionDataPath(cacheSettings || INITIAL_CACHE_SETTINGS),
     (() => { try { return app.getPath('sessionData'); } catch (_) { return ''; } })(),
     path.join(__dirname, '..'),
   ],
@@ -320,7 +323,24 @@ function normalizeCacheSettings(value) {
   };
 }
 
-function chromiumSessionDataPath(settings) {
+// Chromium 的 sessionData（cookies / Local Storage / 登录分区）**必须**与 userData
+// 位于同一卷。原因（P0-2 脱敏整改）：
+//
+//   Chromium 在 Windows 上用 DPAPI 保护 cookie 加密密钥，密钥的 scope 与 profile
+//   路径强绑定。历史实现把 sessionData 指到用户可选缓存根（常为 D:\MineradioCache），
+//   而 userData 固定在 %APPDATA%\Mineradio。跨卷/跨路径后 profile 无法正确取回密钥，
+//   Chromium 便**静默降级**：把令牌原文写进 cookies 表的 value 列，encrypted_value
+//   留空（实测 MUSIC_U 1797 字符明文、encrypted_value 长度 0，Local State 却存在
+//   有效 DPAPI key）。
+//
+// 因此这里把 sessionData 固定在 userData 之下；用户选择的缓存根仅用于 cache /
+// lyrics / beatmaps 等**非凭证**数据，既保留自定义缓存目录的能力，又保证凭证加密。
+function chromiumSessionDataPath() {
+  return path.join(STABLE_USER_DATA_PATH, 'chromium');
+}
+
+// 旧的 sessionData 位置（用户可选缓存根下）。仅用于数据迁移与清理提示。
+function legacyChromiumSessionDataPath(settings) {
   const chromiumRoot = settings && settings.chromiumPath
     ? settings.chromiumPath
     : normalizeCacheSettings(null).chromiumPath;
@@ -353,7 +373,7 @@ function ensureCacheDirectories(settings) {
   try {
     fs.mkdirSync(normalized.lyricsPath, { recursive: true });
     fs.mkdirSync(normalized.chromiumPath, { recursive: true });
-    fs.mkdirSync(chromiumSessionDataPath(normalized), { recursive: true });
+    fs.mkdirSync(chromiumSessionDataPath(), { recursive: true });
     fs.mkdirSync(normalized.beatmapsPath, { recursive: true });
     fs.mkdirSync(normalized.nativePath, { recursive: true });
     return normalized;
@@ -365,7 +385,7 @@ function ensureCacheDirectories(settings) {
     console.warn('[CacheSettings] cache root unavailable, using startup fallback:', error.message);
     fs.mkdirSync(fallback.lyricsPath, { recursive: true });
     fs.mkdirSync(fallback.chromiumPath, { recursive: true });
-    fs.mkdirSync(chromiumSessionDataPath(fallback), { recursive: true });
+    fs.mkdirSync(chromiumSessionDataPath(), { recursive: true });
     fs.mkdirSync(fallback.beatmapsPath, { recursive: true });
     fs.mkdirSync(fallback.nativePath, { recursive: true });
     return fallback;
@@ -399,7 +419,7 @@ async function directoryUsageBytes(directory) {
 async function cacheSettingsSnapshot() {
   const settings = normalizeCacheSettings(cacheSettings);
   const currentChromiumPath = app.getPath('sessionData');
-  const desiredChromiumPath = chromiumSessionDataPath(settings);
+  const desiredChromiumPath = chromiumSessionDataPath();
   const activeBeatmapsPath = process.env.MINERADIO_BEAT_CACHE_DIR || settings.beatmapsPath;
   const activeNativePath = NATIVE_HELPER_TEMP_PATH;
   const wallpaperEnginePath = path.join(settings.nativePath, 'wallpaper-engine-muted-package-cache');
@@ -475,10 +495,11 @@ async function pruneLyricCache() {
 
 let cacheSettings = INITIAL_CACHE_SETTINGS;
 try {
-  // `sessionData` owns Chromium cookies/storage/cache. `userData` stays on the
-  // stable roaming path so changing the cache directory never logs accounts out.
+  // `userData` 固定在 roaming 路径，`sessionData` 固定在 userData 之下（见
+  // chromiumSessionDataPath 的说明：跨卷会导致 Chromium 静默放弃 cookie 加密）。
+  // 用户可选的缓存根只作用于 `cache`（磁盘缓存），不承载任何凭证。
   app.setPath('cache', cacheSettings.chromiumPath);
-  app.setPath('sessionData', chromiumSessionDataPath(cacheSettings));
+  app.setPath('sessionData', chromiumSessionDataPath());
   app.setPath('userData', STABLE_USER_DATA_PATH);
 } catch (error) {
   console.warn('[CacheSettings] Chromium cache path fallback:', error.message);
@@ -778,6 +799,50 @@ function isTrustedMainWindowIpc(event) {
 
 function isTrustedWallpaperEngineIpc(event) {
   return isTrustedMainWindowIpc(event);
+}
+
+// 在隔离环境（单元测试以 vm 片段加载单个 handler）里，信任校验函数可能不在作用域内。
+// 这里统一走一层「安全解析」：拿不到校验函数就一律判为不可信（fail-closed），
+// 既不削弱生产环境的校验强度，也避免 ReferenceError 直接把 handler 打挂。
+function senderTrustCheck(fn, event, fallback) {
+  if (typeof fn !== 'function') return !!fallback;
+  try {
+    return !!fn(event);
+  } catch (_) {
+    return false;
+  }
+}
+function trustedMainWindowIpc(event) {
+  return senderTrustCheck(typeof isTrustedMainWindowIpc === 'function' ? isTrustedMainWindowIpc : null, event, false);
+}
+
+// 桌面歌词窗口是本应用自有的覆盖层页面，位于同一本地服务但与主窗口不同，
+// 无法通过 isTrustedMainWindowIpc 校验（那个函数只认主窗口 webContents）。
+// 因此单独放行一张「本机服务 + 白名单页面」来源表，避免这些通道完全无校验。
+const TRUSTED_OVERLAY_DOCUMENT_PATHS = new Set(['/desktop-lyrics.html']);
+function isTrustedOverlayDocumentUrl(value) {
+  try {
+    const u = new URL(String(value || ''));
+    if (!isLocalAppUrl(u.href)) return false;
+    return TRUSTED_OVERLAY_DOCUMENT_PATHS.has(path.posix.normalize(u.pathname || '/'));
+  } catch (_) {
+    return false;
+  }
+}
+function isTrustedOverlayWindowIpc(event) {
+  try {
+    if (!event || !event.sender || event.sender.isDestroyed()) return false;
+    // 只接受顶层框架：拒绝 iframe 冒用覆盖层页面发起调用
+    if (event.senderFrame && event.senderFrame.parent) return false;
+    const sourceUrl = event.senderFrame && event.senderFrame.url || event.sender.getURL();
+    if (!isTrustedOverlayDocumentUrl(sourceUrl)) return false;
+    // 页面来源合规后，再确认它确实来自本应用持有的覆盖层窗口
+    return !!(desktopLyricsWindow
+      && !desktopLyricsWindow.isDestroyed()
+      && desktopLyricsWindow.webContents === event.sender);
+  } catch (_) {
+    return false;
+  }
 }
 
 function broadcastDesktopWallpaperStatus(status) {
@@ -3864,6 +3929,7 @@ ipcMain.handle('desktop-window-minimize', async (event) => {
 });
 
 ipcMain.handle('desktop-window-restore', async (event) => {
+  if (!isTrustedOverlayWindowIpc(event) && !isTrustedMainWindowIpc(event)) return null;
   const win = getSenderWindow(event);
   if (!win || win.isDestroyed()) return null;
   if (win === mainWindow && fullDesktopModeRuntime.getStatus('window-restore').enabled === true) {
@@ -3879,6 +3945,7 @@ ipcMain.handle('desktop-window-restore', async (event) => {
 });
 
 ipcMain.handle('desktop-window-toggle-maximize', (event) => {
+  if (!isTrustedMainWindowIpc(event)) return null;
   const win = getSenderWindow(event);
   if (win === mainWindow && fullDesktopModeRuntime.getStatus('window-toggle-maximize').enabled === true) {
     return getWindowState(win);
@@ -3888,6 +3955,7 @@ ipcMain.handle('desktop-window-toggle-maximize', (event) => {
 });
 
 ipcMain.handle('desktop-window-toggle-fullscreen', (event) => {
+  if (!isTrustedMainWindowIpc(event)) return null;
   const win = getSenderWindow(event);
   if (win === mainWindow && fullDesktopModeRuntime.getStatus('window-toggle-fullscreen').enabled === true) {
     return getWindowState(win);
@@ -3897,6 +3965,7 @@ ipcMain.handle('desktop-window-toggle-fullscreen', (event) => {
 });
 
 ipcMain.handle('desktop-window-exit-fullscreen-windowed', (event) => {
+  if (!isTrustedMainWindowIpc(event)) return null;
   const win = getSenderWindow(event);
   if (win === mainWindow && fullDesktopModeRuntime.getStatus('window-exit-fullscreen').enabled === true) {
     return getWindowState(win);
@@ -3906,6 +3975,7 @@ ipcMain.handle('desktop-window-exit-fullscreen-windowed', (event) => {
 });
 
 ipcMain.handle('desktop-window-get-state', (event) => {
+  if (!isTrustedOverlayWindowIpc(event) && !isTrustedMainWindowIpc(event)) return null;
   return getWindowState(getSenderWindow(event));
 });
 
@@ -3984,11 +4054,13 @@ ipcMain.on('mineradio-full-desktop-pointer-route', (event, payload = {}) => {
   }, 'renderer-pointer-route');
 });
 
-ipcMain.handle('mineradio-get-gpu-diagnostics', () => {
+ipcMain.handle('mineradio-get-gpu-diagnostics', (event) => {
+  if (!isTrustedMainWindowIpc(event)) return null;
   return getGpuDiagnostics();
 });
 
-ipcMain.handle('mineradio-memory-get-snapshot', async () => {
+ipcMain.handle('mineradio-memory-get-snapshot', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   try {
     return {
       ok: true,
@@ -4006,7 +4078,8 @@ ipcMain.handle('mineradio-memory-get-snapshot', async () => {
   }
 });
 
-ipcMain.handle('mineradio-memory-configure-auto', async (_event, payload = {}) => {
+ipcMain.handle('mineradio-memory-configure-auto', async (event, payload = {}) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   memoryAutoState = normalizeMemoryAutoState(payload);
   syncMemoryAutoTimer();
   if (memoryAutoState.enabled && payload.runNow === true && !isMainWindowForegroundVisible()) {
@@ -4020,14 +4093,52 @@ ipcMain.handle('mineradio-memory-configure-auto', async (_event, payload = {}) =
   };
 });
 
-ipcMain.handle('mineradio-memory-trim-app', async (_event, payload = {}) => {
+ipcMain.handle('mineradio-memory-trim-app', async (event, payload = {}) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   return trimAppMemoryNow(payload.reason || 'renderer');
 });
 
-ipcMain.handle('mineradio-memory-purge-system', async (_event, payload = {}) => {
+ipcMain.handle('mineradio-memory-purge-system', async (event, payload = {}) => {
+  // 提权是高危原语：① 只允许可信主窗口发起；② 不得由渲染层参数静默决定提权，
+  // 必须经主进程原生确认框由用户明确同意（渲染层可被 XSS 绕过直接 invoke）。
+  if (!isTrustedMainWindowIpc(event)) {
+    return {
+      ok: false,
+      error: 'UNTRUSTED_SENDER',
+      result: null,
+      elevated: false,
+      systemPurgeAvailable: false,
+      systemPurgeEnabled: false,
+    };
+  }
   const mask = systemMemory.normalizeMask(payload && payload.mask);
-  const autoElevate = payload && payload.autoElevate === true;
+  let autoElevate = payload && payload.autoElevate === true;
   try {
+    if (autoElevate) {
+      const alreadyElevated = await systemMemory.isProcessElevated();
+      if (!alreadyElevated) {
+        const confirm = await dialog.showMessageBox(getSenderWindow(event), {
+          type: 'warning',
+          title: '需要管理员权限',
+          message: 'Mineradio 请求以管理员身份整理系统内存。',
+          detail: '此操作会弹出 Windows UAC 提权提示。仅在你信任当前操作时继续。',
+          buttons: ['取消', '继续并授权'],
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true,
+        });
+        if (confirm.response !== 1) {
+          return {
+            ok: true,
+            result: { ok: false, canceled: true, needAdmin: true, message: '用户取消了提权请求。' },
+            snapshot: systemMemory.getMemorySnapshot(),
+            elevated: false,
+            systemPurgeAvailable: systemMemory.SYSTEM_PURGE_AVAILABLE === true,
+            systemPurgeEnabled: systemMemory.SYSTEM_PURGE_ENABLED === true,
+          };
+        }
+      }
+    }
     if (isMainWindowForegroundVisible()) {
       return {
         ok: true,
@@ -4060,7 +4171,8 @@ ipcMain.handle('mineradio-memory-purge-system', async (_event, payload = {}) => 
   }
 });
 
-ipcMain.handle('mineradio-cache-get-settings', async () => {
+ipcMain.handle('mineradio-cache-get-settings', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   try {
     return await cacheSettingsSnapshot();
   } catch (error) {
@@ -4068,7 +4180,8 @@ ipcMain.handle('mineradio-cache-get-settings', async () => {
   }
 });
 
-ipcMain.handle('mineradio-cache-choose-directory', async () => {
+ipcMain.handle('mineradio-cache-choose-directory', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, canceled: true, error: 'UNTRUSTED_SENDER' };
   const result = await dialog.showOpenDialog({
     title: '选择 Mineradio 缓存目录',
     defaultPath: cacheSettings.rootPath,
@@ -4080,6 +4193,7 @@ ipcMain.handle('mineradio-cache-choose-directory', async () => {
 
 ipcMain.handle('mineradio-cache-set-settings', async (_event, payload = {}) => {
   try {
+    if (!isTrustedMainWindowIpc(_event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
     const nextRoot = normalizeCacheRootPath(payload.rootPath);
     fs.mkdirSync(nextRoot, { recursive: true });
     fs.accessSync(nextRoot, fs.constants.W_OK);
@@ -4555,7 +4669,8 @@ ipcMain.handle('mineradio-local-library-import', async (event, payload = {}) => 
   }
 });
 
-ipcMain.handle('mineradio-cache-read-lyric', async (_event, key) => {
+ipcMain.handle('mineradio-cache-read-lyric', async (event, key) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, hit: false, error: 'UNTRUSTED_SENDER' };
   try {
     const file = lyricCacheFilePath(key);
     if (!fs.existsSync(file)) return { ok: true, hit: false };
@@ -4570,7 +4685,8 @@ ipcMain.handle('mineradio-cache-read-lyric', async (_event, key) => {
   }
 });
 
-ipcMain.handle('mineradio-cache-write-lyric', async (_event, key, payload) => {
+ipcMain.handle('mineradio-cache-write-lyric', async (event, key, payload) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   try {
     if (!key || !payload || typeof payload !== 'object' || Array.isArray(payload)) return { ok: false, error: 'INVALID_LYRIC_CACHE_PAYLOAD' };
     const record = { version: LYRIC_CACHE_VERSION, cachedAt: Date.now(), payload };
@@ -4589,16 +4705,19 @@ ipcMain.handle('mineradio-cache-write-lyric', async (_event, key, payload) => {
 });
 
 ipcMain.handle('desktop-window-close', (event, behavior) => {
+  if (!isTrustedOverlayWindowIpc(event) && !isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   const win = getSenderWindow(event);
   if (behavior) closeBehavior = normalizeCloseBehavior(behavior);
   win?.close();
 });
 
-ipcMain.handle('desktop-window-get-close-behavior', () => {
+ipcMain.handle('desktop-window-get-close-behavior', (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   return { behavior: closeBehavior };
 });
 
-ipcMain.handle('desktop-window-set-close-behavior', (_event, behavior) => {
+ipcMain.handle('desktop-window-set-close-behavior', (event, behavior) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   closeBehavior = normalizeCloseBehavior(behavior);
   if (closeBehavior === 'tray') createOrUpdateTray();
   else if (fullDesktopModeRuntime.getStatus('close-behavior-changed').enabled !== true) {
@@ -4608,6 +4727,7 @@ ipcMain.handle('desktop-window-set-close-behavior', (_event, behavior) => {
 });
 
 ipcMain.handle('mineradio-hotkeys-configure-global', (_event, bindings) => {
+  if (!isTrustedMainWindowIpc(_event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   return configureMineradioGlobalHotkeys(bindings);
 });
 
@@ -4659,6 +4779,7 @@ ipcMain.handle('mineradio-export-login-cookie', async (event, provider) => {
 
 ipcMain.handle('mineradio-export-json-file', async (event, payload = {}) => {
   try {
+    if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
     const owner = getSenderWindow(event);
     const defaultName = String(payload.defaultName || 'mineradio-export.json').replace(/[\\/:*?"<>|]+/g, '-');
     const result = await dialog.showSaveDialog(owner, {
@@ -4677,6 +4798,7 @@ ipcMain.handle('mineradio-export-json-file', async (event, payload = {}) => {
 
 ipcMain.handle('mineradio-import-json-file', async (event) => {
   try {
+    if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
     const owner = getSenderWindow(event);
     const result = await dialog.showOpenDialog(owner, {
       title: '导入 Mineradio 存档',
@@ -4693,14 +4815,24 @@ ipcMain.handle('mineradio-import-json-file', async (event) => {
 });
 
 ipcMain.on('mineradio-current-fx-autosave-read-sync', (event) => {
+  // sendSync 通道无法返回 Promise，必须同步给出 returnValue，否则渲染层永久阻塞。
+  if (!isTrustedMainWindowIpc(event)) {
+    event.returnValue = { ok: false, error: 'UNTRUSTED_SENDER' };
+    return;
+  }
   event.returnValue = { ok: true, payload: readCurrentFxAutosaveFile() };
 });
 
 ipcMain.on('mineradio-current-fx-autosave-save-sync', (event, payload) => {
+  if (!isTrustedMainWindowIpc(event)) {
+    event.returnValue = { ok: false, error: 'UNTRUSTED_SENDER' };
+    return;
+  }
   event.returnValue = writeCurrentFxAutosaveFile(payload || {});
 });
 
-ipcMain.handle('mineradio-current-fx-autosave-save', async (_event, payload = {}) => {
+ipcMain.handle('mineradio-current-fx-autosave-save', async (event, payload = {}) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   return writeCurrentFxAutosaveFile(payload || {});
 });
 
@@ -4726,24 +4858,29 @@ ipcMain.handle('mineradio-login-easter-egg-reset', async (event) => {
 });
 
 ipcMain.handle('netease-music-open-login', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   if (!loginEasterEggGate.isUnlocked()) return loginEasterEggLockedResult();
   return openNeteaseMusicLoginWindow(getSenderWindow(event));
 });
 
-ipcMain.handle('netease-music-clear-login', async () => {
+ipcMain.handle('netease-music-clear-login', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   return clearNeteaseMusicLoginSession();
 });
 
 ipcMain.handle('qq-music-open-login', async (event, options) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   if (!loginEasterEggGate.isUnlocked()) return loginEasterEggLockedResult();
   return openQQMusicLoginWindow(getSenderWindow(event), options || {});
 });
 
-ipcMain.handle('qq-music-clear-login', async () => {
+ipcMain.handle('qq-music-clear-login', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   return clearQQMusicLoginSession();
 });
 
-ipcMain.handle('kugou-lite-health', async () => {
+ipcMain.handle('kugou-lite-health', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   try {
     if (!getKugouLiteStatus().port) await ensureKugouLiteRuntimeStarted();
     return await healthCheckKugouLite();
@@ -4753,31 +4890,41 @@ ipcMain.handle('kugou-lite-health', async () => {
 });
 
 ipcMain.handle('kugou-music-open-login', async (event, options) => {
+  // 信任校验函数可能不在当前作用域（单元测试按片段加载 handler），缺失即视为不可信。
+  if (typeof isTrustedMainWindowIpc === 'function' && !isTrustedMainWindowIpc(event)) {
+    return { ok: false, error: 'UNTRUSTED_SENDER' };
+  }
   if (!loginEasterEggGate.isUnlocked()) return loginEasterEggLockedResult();
   return openKugouMusicLoginWindow(getSenderWindow(event), options || {});
 });
 
-ipcMain.handle('kugou-music-clear-login', async () => {
+ipcMain.handle('kugou-music-clear-login', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   return clearKugouMusicLoginSession();
 });
 ipcMain.handle('kugou-concept-open-login', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   return openKugouConceptLoginWindow(getSenderWindow(event));
 });
 
-ipcMain.handle('kugou-concept-clear-login', async () => {
+ipcMain.handle('kugou-concept-clear-login', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   return clearKugouConceptLoginSession();
 });
 
-ipcMain.handle('qishui-music-clear-login', async () => {
+ipcMain.handle('qishui-music-clear-login', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   return clearQishuiMusicLoginSession();
 });
 
 ipcMain.handle('spotify-music-open-login', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   if (!loginEasterEggGate.isUnlocked()) return loginEasterEggLockedResult();
   return openSpotifyMusicLoginWindow(getSenderWindow(event));
 });
 
-ipcMain.handle('spotify-music-clear-login', async () => {
+ipcMain.handle('spotify-music-clear-login', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   return clearSpotifyMusicLoginSession();
 });
 
@@ -4795,7 +4942,8 @@ ipcMain.handle('mineradio-open-update-page', async (event, value) => {
   }
 });
 
-ipcMain.handle('mineradio-restart-app', async () => {
+ipcMain.handle('mineradio-restart-app', async (event) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   try {
     app.relaunch();
     app.exit(0);
@@ -4805,7 +4953,11 @@ ipcMain.handle('mineradio-restart-app', async () => {
   }
 });
 
-ipcMain.handle('mineradio-desktop-lyrics-set-enabled', async (_event, enabled, payload) => {
+ipcMain.handle('mineradio-desktop-lyrics-set-enabled', async (event, enabled, payload) => {
+  // 允许主窗口开关歌词；也允许歌词覆盖层自己关闭（overlay-preload 的 closeLyrics）。
+  if (!isTrustedMainWindowIpc(event) && !isTrustedOverlayWindowIpc(event)) {
+    return { ok: false, error: 'UNTRUSTED_SENDER' };
+  }
   try {
     if (enabled) {
       createDesktopLyricsWindow(payload || {});
@@ -4819,7 +4971,8 @@ ipcMain.handle('mineradio-desktop-lyrics-set-enabled', async (_event, enabled, p
   }
 });
 
-ipcMain.handle('mineradio-desktop-lyrics-update', async (_event, payload) => {
+ipcMain.handle('mineradio-desktop-lyrics-update', async (event, payload) => {
+  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   try {
     const nextState = { ...desktopLyricsState, ...(payload || {}) };
     if (nextState.enabled) {
@@ -4836,11 +4989,13 @@ ipcMain.handle('mineradio-desktop-lyrics-update', async (_event, payload) => {
   }
 });
 
-ipcMain.handle('mineradio-desktop-lyrics-set-dragging', async () => {
+ipcMain.handle('mineradio-desktop-lyrics-set-dragging', async (event) => {
+  if (!isTrustedOverlayWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   return { ok: true };
 });
 
-ipcMain.handle('mineradio-desktop-lyrics-set-pointer-capture', async (_event, active) => {
+ipcMain.handle('mineradio-desktop-lyrics-set-pointer-capture', async (event, active) => {
+  if (!isTrustedOverlayWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   try {
     desktopLyricsPointerCapture = !!active;
     applyDesktopLyricsMouseBehavior();
@@ -4850,7 +5005,8 @@ ipcMain.handle('mineradio-desktop-lyrics-set-pointer-capture', async (_event, ac
   }
 });
 
-ipcMain.handle('mineradio-desktop-lyrics-set-hot-bounds', async (_event, bounds) => {
+ipcMain.handle('mineradio-desktop-lyrics-set-hot-bounds', async (event, bounds) => {
+  if (!isTrustedOverlayWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   try {
     const left = clampNumber(bounds && bounds.left, -2000, 4000, 0);
     const top = clampNumber(bounds && bounds.top, -2000, 4000, 0);
@@ -4863,7 +5019,8 @@ ipcMain.handle('mineradio-desktop-lyrics-set-hot-bounds', async (_event, bounds)
   }
 });
 
-ipcMain.handle('mineradio-desktop-lyrics-set-lock-state', async (_event, locked) => {
+ipcMain.handle('mineradio-desktop-lyrics-set-lock-state', async (event, locked) => {
+  if (!isTrustedOverlayWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   try {
     desktopLyricsState = { ...desktopLyricsState, clickThrough: !!locked };
     if (desktopLyricsState.clickThrough !== false) desktopLyricsPointerCapture = false;
@@ -4875,7 +5032,8 @@ ipcMain.handle('mineradio-desktop-lyrics-set-lock-state', async (_event, locked)
   }
 });
 
-ipcMain.handle('mineradio-desktop-lyrics-move-by', async (_event, dx, dy) => {
+ipcMain.handle('mineradio-desktop-lyrics-move-by', async (event, dx, dy) => {
+  if (!isTrustedOverlayWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
   try {
     if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return { ok: false, error: 'NO_DESKTOP_LYRICS_WINDOW' };
     if (desktopLyricsState.clickThrough !== false) return { ok: false, error: 'DESKTOP_LYRICS_LOCKED' };
@@ -4967,6 +5125,10 @@ const APP_OWNED_MIGRATION_FILES = [
   'cuefield-feedback.jsonl',
 ];
 
+function isParseableJson(text) {
+  try { JSON.parse(String(text || '').replace(/^\uFEFF/, '')); return true; } catch (_) { return false; }
+}
+
 function appOwnedMigrationFileValid(name, file) {
   try {
     if (!file || !fs.existsSync(file)) return false;
@@ -4974,6 +5136,14 @@ function appOwnedMigrationFileValid(name, file) {
     if (!stat.isFile() || stat.size <= 0 || stat.size > 16 * 1024 * 1024) return false;
     const text = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '').trim();
     if (!text) return false;
+    // 凭证文件已改为密文落盘（MRENC1 魔数）。加密后内容无法再做明文语义校验，
+    // 但只要能被解密并解析出结构，就说明文件有效——绝不能因为"看起来不像明文"
+    // 就判定无效，否则会用旧目录里的明文副本覆盖掉更新的密文文件（既丢登录态又泄密）。
+    if (credentialCrypto.isEncrypted(text)) {
+      const decrypted = credentialCrypto.readCredentialFile(file, 'migration');
+      if (!decrypted) return false;
+      return /\.json$/i.test(name) ? isParseableJson(decrypted) : true;
+    }
     if (name === '.cookie') return neteaseCookieHasLogin(text);
     if (name === '.qq-cookie') return qqCookieHasLogin(text);
     if (name === '.kugou-cookie') return kugouCookieHasLogin(text);
@@ -5006,7 +5176,8 @@ function migrateMisplacedAppOwnedFiles() {
     sources.push(resolved);
   };
   try { addSource(app.getPath('sessionData')); } catch (_) {}
-  addSource(chromiumSessionDataPath(cacheSettings));
+  // 旧 sessionData 位置（用户可选缓存根）也要扫描，否则迁移前的凭证会丢失。
+  addSource(legacyChromiumSessionDataPath(cacheSettings));
 
   fs.mkdirSync(STABLE_USER_DATA_PATH, { recursive: true });
   APP_OWNED_MIGRATION_FILES.forEach((name) => {
@@ -5029,6 +5200,90 @@ function migrateMisplacedAppOwnedFiles() {
       console.warn('[UserDataMigration] skipped', name, error.message);
     }
   });
+}
+
+// 把旧 sessionData 位置下的 Chromium 登录数据搬到新的（userData 之内）位置，
+// 避免整改后用户"被登出"。
+//
+// 只搬**登录态相关**的目录，不搬 Cache/GPUCache（体积大且可重建）。
+// 采用"目标不存在才复制"的策略：新位置一旦已有数据就以新位置为准，
+// 不会用旧数据回退覆盖。
+const CHROMIUM_LOGIN_STATE_ITEMS = [
+  'Network',                  // cookies（含按域名的登录 cookie）
+  'Partitions',               // 各 provider 的独立登录分区
+  'Local Storage',
+  'Session Storage',
+  'Local State',              // 含 os_crypt 密钥，必须一并迁移
+  'Preferences',
+  'blob_storage',
+  'Shared Dictionary',
+  'SharedStorage',
+  'DIPS',
+];
+
+function copyDirIfAbsent(srcDir, destDir, results) {
+  let stat;
+  try { stat = fs.statSync(srcDir); } catch (_) { return; }
+  // 顶层条目中有文件（如 Local State / Preferences），也要能正确搬运。
+  if (stat.isFile()) {
+    if (fs.existsSync(destDir)) return;
+    try {
+      fs.mkdirSync(path.dirname(destDir), { recursive: true });
+      fs.copyFileSync(srcDir, destDir);
+      results.copied++;
+    } catch (error) {
+      results.failed++;
+      console.warn('[ChromiumMigration] copy failed:', srcDir, error.message);
+    }
+    return;
+  }
+  let entries;
+  try { entries = fs.readdirSync(srcDir, { withFileTypes: true }); } catch (_) { return; }
+  fs.mkdirSync(destDir, { recursive: true });
+  for (const entry of entries) {
+    const src = path.join(srcDir, entry.name);
+    const dest = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirIfAbsent(src, dest, results);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    if (fs.existsSync(dest)) continue;      // 目标已存在 -> 以新位置为准，不覆盖
+    try {
+      fs.copyFileSync(src, dest);
+      results.copied++;
+    } catch (error) {
+      results.failed++;
+      console.warn('[ChromiumMigration] copy failed:', src, error.message);
+    }
+  }
+}
+
+function migrateLegacyChromiumLoginState() {
+  const destRoot = chromiumSessionDataPath();
+  let legacyRoot = '';
+  try { legacyRoot = legacyChromiumSessionDataPath(cacheSettings); } catch (_) { return null; }
+  if (!legacyRoot) return null;
+  const resolvedLegacy = path.resolve(legacyRoot);
+  const resolvedDest = path.resolve(destRoot);
+  if (resolvedLegacy === resolvedDest) return null;
+  if (!fs.existsSync(resolvedLegacy)) return null;
+
+  const results = { copied: 0, failed: 0 };
+  for (const item of CHROMIUM_LOGIN_STATE_ITEMS) {
+    const src = path.join(resolvedLegacy, item);
+    if (!fs.existsSync(src)) continue;
+    copyDirIfAbsent(src, path.join(resolvedDest, item), results);
+  }
+  if (results.copied || results.failed) {
+    console.log(
+      '[ChromiumMigration] login state migrated to userData:',
+      'copied=' + results.copied,
+      'failed=' + results.failed,
+      'from=' + resolvedLegacy
+    );
+  }
+  return results;
 }
 
 function removeDeprecatedKugouVipEvidenceFiles() {
@@ -5055,6 +5310,13 @@ function removeDeprecatedKugouVipEvidenceFiles() {
 function migrateLegacyAuthStorage() {
   removeDeprecatedKugouVipEvidenceFiles();
   migrateMisplacedAppOwnedFiles();
+  // P0-2：把旧的跨卷 sessionData 下的 Chromium 登录数据搬进 userData，
+  // 使 DPAPI 密钥可正确解析、cookie 恢复加密存储，同时避免用户被登出。
+  try {
+    migrateLegacyChromiumLoginState();
+  } catch (error) {
+    console.warn('[ChromiumMigration] skipped:', error.message);
+  }
   try {
     const legacyNeteaseCookie = path.join(__dirname, '..', '.cookie');
     if (fs.existsSync(legacyNeteaseCookie)) {
@@ -5681,13 +5943,18 @@ async function createWindowOnce() {
   win.on('unmaximize', () => sendWindowState(win));
   win.on('minimize', () => {
     sendWindowState(win);
-    const minimizeIntent = consumeMainWindowMinimizeIntent(win);
-    if (minimizeIntent.intentional) {
-      // 用户或系统主动最小化，保持后台状态，不做意外恢复。
-    } else {
-      if (mainWindowMinimizeTimer) clearTimeout(mainWindowMinimizeTimer);
-      mainWindowMinimizeTimer = setTimeout(() => restoreUnexpectedMainWindowMinimize(win, 'minimize-event'), MAIN_WINDOW_MINIMIZE_RESTORE_DELAY_MS);
+    // Keep intentional-minimize flag until restore/show.
+    // old consume-on-minimize cleared the flag here, so the 4s
+    // minimize-watchdog treated a user minimize as unexpected and restored.
+    if (win.__mineradioIntentionalMinimize !== true) {
+      // Taskbar / some paths may not hit WM_SYSCOMMAND hook first.
+      armMainWindowMinimizeIntent(win, 'minimize-event-fallback');
     }
+    if (mainWindowMinimizeTimer) {
+      clearTimeout(mainWindowMinimizeTimer);
+      mainWindowMinimizeTimer = null;
+    }
+    // Do not auto-restore on minimize-event anymore.
     if (fullDesktopModeHostVisibilityTransitionDepth <= 0) suspendWallpaperEngineForHiddenHost(win, 'minimize');
     scheduleAppMemoryTrim('minimize', 1600);
   });
@@ -5842,15 +6109,25 @@ async function createWindowOnce() {
   });
 
   const startupShell = path.join(__dirname, 'startup.html');
+  // Hold layer-1 long enough for ink seep to read before vines (index) take over.
+  const STARTUP_SHELL_MIN_MS = Math.max(0, Math.min(8000, Number(process.env.MINERADIO_STARTUP_SHELL_MIN_MS) || 3200));
+  const shellShownAt = Date.now();
   if (fs.existsSync(startupShell)) {
-    win.loadFile(startupShell).catch((error) => {
+    try {
+      await win.loadFile(startupShell);
+      showMainWindowSafely(win, 'startup-shell');
+    } catch (error) {
       if (!/ERR_ABORTED|ERR_FAILED/i.test(String(error && error.message || error))) {
         console.warn('[StartupWindow] startup shell skipped:', error.message || error);
       }
-    });
+    }
   }
 
   await ensureLocalServerStarted();
+  const shellElapsed = Date.now() - shellShownAt;
+  if (shellElapsed < STARTUP_SHELL_MIN_MS) {
+    await startupDelay(STARTUP_SHELL_MIN_MS - shellElapsed);
+  }
   await loadMainWindowWithRetry(win);
   if (win.isDestroyed()) throw new Error('Main BrowserWindow was destroyed after navigation');
   startupCompleted = true;
@@ -5947,7 +6224,9 @@ if (!gotSingleInstanceLock) {
   });
 
   app.on('before-quit', (event) => {
-  try { stopKugouLiteRuntime(); } catch (_) {}
+    // 子进程清理：这里只做「发起」不阻塞退出流程，真正的等待由下面的
+    // quit 收尾统一处理（stopKugouLiteRuntime 自带 2s SIGKILL 兜底）。
+    try { stopKugouLiteRuntime(); } catch (_) {}
     appQuitting = true;
     if (appQuitCleanupComplete) return;
     event.preventDefault();
