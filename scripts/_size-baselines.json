@@ -1,0 +1,50 @@
+{
+  "public/css/index.css": {
+    "lines": 18113,
+    "bytes": 426268,
+    "softCapBytes": 439057,
+    "redCapBytes": 502997,
+    "softCapLines": 18657,
+    "redCapLines": 21374
+  },
+  "server.js": {
+    "lines": 7468,
+    "bytes": 305697,
+    "softCapBytes": 314868,
+    "redCapBytes": 360723,
+    "softCapLines": 7693,
+    "redCapLines": 8813
+  },
+  "desktop/kugou-lite-media.js": {
+    "lines": 1359,
+    "bytes": 50579,
+    "softCapBytes": 52097,
+    "redCapBytes": 59684,
+    "softCapLines": 1400,
+    "redCapLines": 1604
+  },
+  "public/js/modules/05-playback/03a-home-dashboard.js": {
+    "lines": 1350,
+    "bytes": 62020,
+    "softCapBytes": 63881,
+    "redCapBytes": 73184,
+    "softCapLines": 1391,
+    "redCapLines": 1593
+  },
+  "public/js/modules/05-playback/04-home-empty-wallpaper.js": {
+    "lines": 490,
+    "bytes": 18679,
+    "softCapBytes": 19240,
+    "redCapBytes": 22042,
+    "softCapLines": 505,
+    "redCapLines": 579
+  },
+  "public/css/muhao-home-hero.css": {
+    "lines": 26,
+    "bytes": 3881,
+    "softCapBytes": 3998,
+    "redCapBytes": 4580,
+    "softCapLines": 27,
+    "redCapLines": 31
+  }
+}
