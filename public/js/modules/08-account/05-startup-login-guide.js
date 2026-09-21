@@ -1,6 +1,19 @@
 var startupLoginGuideShown = false;
 var loginGuideAnimating = false;
 var loginGuideRaf = null;
+
+// 脱敏整改 P0-3：调试用逃生开关，默认关闭。
+// 开启方式：window.MINERADIO_SKIP_STARTUP_LOGIN_GUIDE === true
+//        或 localStorage['mineradio-skip-startup-login-guide'] === '1'
+function startupLoginGuideDebugSkipEnabled() {
+  try {
+    if (typeof window !== 'undefined' && window.MINERADIO_SKIP_STARTUP_LOGIN_GUIDE === true) return true;
+    return localStorage.getItem('mineradio-skip-startup-login-guide') === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
 function runLoginGuideParticles(done) {
   var canvas = document.getElementById('login-guide-canvas');
   if (!canvas || reduceSplashMotion) {
@@ -106,8 +119,12 @@ function runLoginGuideParticles(done) {
   loginGuideRaf = requestAnimationFrame(draw);
 }
 function maybeRunStartupLoginGuide(source) {
-  // MUHAO_SKIP_STARTUP_LOGIN_GUIDE: avoid auto login wall on first enter
-  return;
+  // 脱敏整改 P0-3：此前这里被硬编码为无条件 `return`，使整个自动登录引导失效、
+  // 后续 15 行守卫逻辑全部成为死代码。现在恢复真实行为；
+  // 仅在显式调试开关下才跳过（默认关闭）。
+  if (typeof startupLoginGuideDebugSkipEnabled === 'function' && startupLoginGuideDebugSkipEnabled()) {
+    return;
+  }
   if (startupLoginGuideShown || loginGuideAnimating) return;
   if (typeof loginEasterEggAllowsStartupGuide === 'function' && !loginEasterEggAllowsStartupGuide()) return;
   if (visualGuideActive) return;

@@ -8,6 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const qishuiAuthV6 = require('./qishui-auth-v6');
+const credentialCrypto = require('./desktop/credential-crypto');
 
 const DEFAULT_CONFIG_FILE = path.join(__dirname, '.qishui-qr-login.json');
 
@@ -24,9 +25,11 @@ function defaultConfig() {
 
 function readConfig(file) {
   try {
-    if (!file || !fs.existsSync(file)) return defaultConfig();
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
-    return { ...defaultConfig(), ...(parsed && typeof parsed === 'object' ? parsed : {}) };
+    if (!file) return defaultConfig();
+    // 统一走凭证加密模块：兼容历史明文，解密失败按"无配置"处理。
+    const parsed = credentialCrypto.readCredentialJson(file, 'qishui-qr-login');
+    if (!parsed) return defaultConfig();
+    return { ...defaultConfig(), ...parsed };
   } catch (error) {
     console.warn('[QishuiQrLogin] ignored invalid config:', error && error.message || error);
     return defaultConfig();
@@ -35,8 +38,8 @@ function readConfig(file) {
 
 function writeConfig(file, value) {
   if (!file) return;
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(value, null, 2), 'utf8');
+  // 含登录 cookie / msToken，必须加密落盘（脱敏整改 P0）
+  credentialCrypto.writeCredentialJson(file, value, 'qishui-qr-login');
 }
 
 function hasLoginCookie(cookie) {

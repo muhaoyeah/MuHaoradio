@@ -787,11 +787,26 @@ function handleVisualGuideSurfaceClick(e) {
 // ============================================================
 //  动态库加载
 // ============================================================
+// 只允许从可信 HTTPS CDN 加载（目前仅手势识别用的 jsdelivr），
+// 拒绝任意来源，避免被上游数据注入成任意脚本 URL。
+var TRUSTED_SCRIPT_CDN_HOSTS = ['cdn.jsdelivr.net'];
+function safeExternalScriptUrl(src) {
+  try {
+    var url = new URL(String(src || ''), location.href);
+    if (url.protocol !== 'https:') return '';
+    var host = url.hostname.toLowerCase();
+    return TRUSTED_SCRIPT_CDN_HOSTS.indexOf(host) >= 0 ? url.href : '';
+  } catch (e) { return ''; }
+}
 function loadScriptOnce(src) {
   return new Promise(function (resolve, reject) {
-    var hit = document.querySelector('script[src="' + src + '"]');
+    var safeSrc = safeExternalScriptUrl(src);
+    if (!safeSrc) { reject(new Error('Untrusted script source rejected')); return; }
+    // 用 CSS.escape 兼容的写法选择器：URL 中的引号/反斜杠可能破坏属性选择器
+    var hit = null;
+    try { hit = document.querySelector('script[src="' + safeSrc.replace(/"/g, '\\"') + '"]'); } catch (e) { hit = null; }
     if (hit) { resolve(); return; }
-    var sc = document.createElement('script'); sc.src = src; sc.async = true;
+    var sc = document.createElement('script'); sc.src = safeSrc; sc.async = true;
     sc.onload = resolve; sc.onerror = reject;
     document.head.appendChild(sc);
   });

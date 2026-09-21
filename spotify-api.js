@@ -3,6 +3,7 @@
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
+const credentialCrypto = require('./desktop/credential-crypto');
 
 const SPOTIFY_ACCOUNTS_BASE = (process.env.SPOTIFY_ACCOUNTS_BASE || 'https://accounts.spotify.com').replace(/\/+$/, '');
 const SPOTIFY_API_BASE = (process.env.SPOTIFY_API_BASE || 'https://api.spotify.com/v1').replace(/\/+$/, '');
@@ -96,7 +97,9 @@ function readSpotifyFileConfig() {
   for (const file of candidates) {
     try {
       if (!fs.existsSync(file)) continue;
-      const parsed = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+      // 凭据（clientSecret）统一走加密模块读取，兼容历史明文。
+      const parsed = credentialCrypto.readCredentialJson(file, 'spotify-config');
+      if (!parsed) continue;
       const config = normalizeSpotifyFileConfig(parsed, file);
       if (config.clientId || config.clientSecret || config.redirectUri || config.scopes.length || config.market) return config;
     } catch (err) {
@@ -152,7 +155,9 @@ function readStoredSpotifyToken() {
   const file = getSpotifyTokenFile();
   try {
     if (!file || !fs.existsSync(file)) return { file, accessToken: '', refreshToken: '', expiresAt: 0 };
-    const raw = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+    // access/refresh token 统一走加密模块读取，兼容历史明文。
+    const raw = credentialCrypto.readCredentialJson(file, 'spotify-token');
+    if (!raw) throw new Error('SPOTIFY_TOKEN_UNREADABLE');
     return {
       file,
       accessToken: normalizeText(raw.accessToken || raw.access_token),
@@ -170,8 +175,9 @@ function readStoredSpotifyToken() {
 }
 
 function writeJsonFile(file, payload) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(payload, null, 2), 'utf8');
+  // 同时用于 .spotify-credentials.json（含 clientSecret）与 .spotify-token.json，
+  // 一律加密落盘（脱敏整改 P0）。
+  credentialCrypto.writeCredentialJson(file, payload, 'spotify-json');
 }
 
 function saveSpotifyOAuthToken(payload) {

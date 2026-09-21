@@ -138,8 +138,12 @@ const { planCuefieldTransitionFromCache } = require('./cuefield/mineradio-bridge
 const kugouLiteSession = require('./desktop/kugou-lite-session');
 const kugouLiteMedia = require('./desktop/kugou-lite-media');
 
-// 进程级异常兜底：记录日志后有序退出（不 swallow 续跑，避免状态不一致）。
-// 退出码 1 让 Electron 侧可识别异常终止；1.5s 延迟给 stdout/日志落盘时间。
+// 进程级异常兜底。
+// uncaughtException 通常是同步逻辑损坏，状态已不可信 → 记录后退出。
+// unhandledRejection 大量来自网络/IO 的异步失败（DNS、超时、连接重置、Abort 等），
+// 这类错误对本地服务是「单请求失败」而非「进程不可用」。若一律 process.exit(1)，
+// 一次网络抖动就会杀掉本地服务、渲染层随即失去全部 API。故按错误性质分流：
+// 可恢复的 I/O / 网络 / 中止类错误仅记录；其余才走致命退出。
 let mineradioFatalLogged = false;
 function mineradioFatalExit(kind, err) {
   if (mineradioFatalLogged) return;
@@ -150,8 +154,36 @@ function mineradioFatalExit(kind, err) {
   } catch (_) { /* 日志本身失败也继续退出流程 */ }
   setTimeout(() => process.exit(1), 1500);
 }
+const RECOVERABLE_REJECTION_CODES = new Set([
+  'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED', 'EPIPE', 'ETIMEDOUT', 'ESOCKETTIMEDOUT',
+  'EAI_AGAIN', 'ENOTFOUND', 'EHOSTUNREACH', 'ENETUNREACH', 'ERR_CANCELED', 'ABORT_ERR',
+  'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET', 'UND_ERR_ABORTED', 'UND_ERR_RESPONSE_STATUS_CODE',
+]);
+function isRecoverableAsyncFailure(reason) {
+  if (!reason) return false;
+  const name = String(reason.name || '');
+  const code = String(reason.code || '');
+  // fetch/\AbortController 的中止与超时
+  if (name === 'AbortError' || name === 'TimeoutError') return true;
+  if (code && RECOVERABLE_REJECTION_CODES.has(code)) return true;
+  // Node 的 AggregateError（例如多地址全部连接失败）
+  if (name === 'AggregateError' && Array.isArray(reason.errors)) {
+    return reason.errors.length > 0 && reason.errors.every(isRecoverableAsyncFailure);
+  }
+  return false;
+}
 process.on('uncaughtException', (err) => mineradioFatalExit('uncaughtException', err));
-process.on('unhandledRejection', (reason) => mineradioFatalExit('unhandledRejection', reason));
+process.on('unhandledRejection', (reason) => {
+  if (isRecoverableAsyncFailure(reason)) {
+    try {
+      const detail = reason && (reason.code || reason.name || reason.message) || String(reason);
+      console.error('[Server][unhandledRejection] 已忽略可恢复的网络/IO 错误:', detail);
+    } catch (_) {}
+    return;
+  }
+  mineradioFatalExit('unhandledRejection', reason);
+});
 
 const PORT = process.env.PORT || 3000;
 // 默认只监听本机回环；显式 --lan 或 MINERADIO_LAN=1 才放宽到局域网。
@@ -351,18 +383,22 @@ function getKugouCookieFile() {
 function getQishuiCookieFile() {
   return process.env.QISHUI_COOKIE_FILE || DEFAULT_QISHUI_COOKIE_FILE;
 }
+// ---------------------------------------------------------------------------
+// 凭证落盘加密（脱敏整改 P0）
+//
+// 背景：此前 .cookie / .kugou-cookie 等文件以明文写入 userData，
+// 任意本地进程可直接读取账号会话令牌（实测 MUSIC_U 等 898 字符明文落盘）。
+//
+// 实现统一收敛到 desktop/credential-crypto.js（safeStorage/DPAPI + 'MRENC1' 魔数），
+// 兼容读取历史明文并在下次写入时自动升级为密文。
+// ---------------------------------------------------------------------------
+const credentialCrypto = require('./desktop/credential-crypto');
+
 function readConfiguredCookieFile(file) {
-  try {
-    if (file && fs.existsSync(file)) return fs.readFileSync(file, 'utf8').trim();
-  } catch (_) {}
-  return '';
+  return credentialCrypto.readCredentialFile(file, 'configured-cookie');
 }
 function writeConfiguredCookieFile(file, value) {
-  try {
-    if (!file) return;
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, String(value || ''), 'utf8');
-  } catch (_) {}
+  credentialCrypto.writeCredentialFile(file, value, 'configured-cookie');
 }
 const configuredCookieStores = {
   netease: { file: '', value: '', getFile: getCookieFile },
@@ -403,12 +439,10 @@ function saveKugouCookie(c) {
   kugouCookie = saveConfiguredCookieStore(configuredCookieStores.kugou, normalizeCookieHeader(c) || rawCookieFallback(c));
   clearKugouSessionCaches();
 }
-let kugouConceptCookie = '';
-try { if (fs.existsSync(KUGOU_CONCEPT_COOKIE_FILE)) kugouConceptCookie = fs.readFileSync(KUGOU_CONCEPT_COOKIE_FILE, 'utf8').trim(); }
-catch (e) { kugouConceptCookie = ''; }
+let kugouConceptCookie = credentialCrypto.readCredentialFile(KUGOU_CONCEPT_COOKIE_FILE, 'kugou-concept');
 function saveKugouConceptCookie(c) {
   kugouConceptCookie = normalizeCookieHeader(c) || rawCookieFallback(c);
-  try { fs.writeFileSync(KUGOU_CONCEPT_COOKIE_FILE, kugouConceptCookie); } catch (e) {}
+  credentialCrypto.writeCredentialFile(KUGOU_CONCEPT_COOKIE_FILE, kugouConceptCookie, 'kugou-concept');
 }
 
 let qishuiCookie = '';
@@ -480,9 +514,9 @@ function rejectIfNonLocalOrigin(req, res) {
 }
 
 // ---------- SSRF 防护（T-06） ----------
-// 模式：默认「只记录不拦截」(record)，MINERADIO_SSRF_ENFORCE=1 时正式拦截。
-// 先跑记录模式观察一轮，确认无误伤后再开拦截，避免误伤走内网/短链跳转的正常封面与音频。
-const SSRF_ENFORCE = process.env.MINERADIO_SSRF_ENFORCE === '1';
+// 模式：默认「正式拦截」(enforce)，可疑目标直接拒绝；MINERADIO_SSRF_ENFORCE=0 可临时退回「只记录不拦截」(record) 用于调试。
+// enforce 已覆盖 #auth= 汽水解密分支（getQishuiDecryptedAudio 内统一走 fetchProxyValidated），不存在绕过路径。
+const SSRF_ENFORCE = process.env.MINERADIO_SSRF_ENFORCE !== '0';
 const SSRF_RECORD_LIMIT = 200;
 const ssrfRecordLog = [];
 function ssrfLog(entry) {
@@ -545,6 +579,28 @@ async function validateProxyTarget(rawUrl) {
 }
 // 带校验的 fetch：手动跟随重定向（最多 maxHops 跳），每一跳都过 validateProxyTarget。
 // record 模式下发现可疑只记录仍放行；enforce 模式直接拒绝。
+//
+// DNS 钉死（防 TOCTOU / DNS rebinding）：validateProxyTarget 解析得到的 IP 会被固定下来，
+// 并通过自定义 lookup 交给底层 socket 使用，避免「校验用 IP-A、连接用 IP-B」的重绑定窗口。
+// 仅在拿到有效 IP 时启用；IPv6 字面量等场景回退到系统解析。
+function pinnedLookupFor(verdict) {
+  const ips = Array.isArray(verdict && verdict.ips) ? verdict.ips.filter(Boolean) : [];
+  if (!ips.length) return undefined;
+  const preferred = ips[0];
+  const isV6 = net.isIPv6(preferred);
+  return function pinnedLookup(hostname, options, callback) {
+    // 兼容 (hostname, callback) 与 (hostname, options, callback) 两种签名
+    if (typeof options === 'function') { callback = options; options = {}; }
+    const wantAll = !!(options && options.all);
+    const family = Number(options && options.family) || 0;
+    const pool = family ? ips.filter(ip => (family === 6) === net.isIPv6(ip)) : ips;
+    const chosen = pool.length ? pool : ips;
+    if (!chosen.length) { callback(new Error('DNS_PIN_EMPTY')); return; }
+    if (wantAll) callback(null, chosen.map(address => ({ address, family: net.isIPv6(address) ? 6 : 4 })));
+    else callback(null, chosen[0], net.isIPv6(chosen[0]) ? 6 : 4);
+  };
+}
+
 async function fetchProxyValidated(rawUrl, options, maxHops) {
   let current = rawUrl;
   const hops = (maxHops == null ? 3 : maxHops);
@@ -558,11 +614,14 @@ async function fetchProxyValidated(rawUrl, options, maxHops) {
         throw err;
       }
     }
-    const resp = await fetch(current, Object.assign({}, options, { redirect: 'manual' }));
+    const pinnedLookup = pinnedLookupFor(verdict);
+    const reqOptions = Object.assign({}, options, { redirect: 'manual' });
+    if (pinnedLookup) reqOptions.lookup = pinnedLookup;
+    const resp = await fetch(current, reqOptions);
     if (resp.status >= 300 && resp.status < 400) {
       const loc = resp.headers.get('location');
       if (!loc) return resp;
-      try { resp.body && resp.body.cancel && resp.body.cancel(); } catch (_) {}
+      try { if (resp.body && typeof resp.body.cancel === 'function') await resp.body.cancel().catch(function () {}); } catch (_) {}
       current = new URL(loc, current).href;
       continue;
     }
@@ -576,8 +635,10 @@ async function fetchProxyValidated(rawUrl, options, maxHops) {
 // 媒体响应的 CORS 头：只对本地来源回显 Origin，不再使用 '*'；同源请求无需 ACAO，直接省略
 function mediaCorsHeaders(req) {
   const origin = req && req.headers ? req.headers.origin : undefined;
-  if (origin && isLocalOrMissingOrigin(origin)) return { 'Access-Control-Allow-Origin': String(origin) };
-  return {};
+  if (origin && isLocalOrMissingOrigin(origin)) {
+    return { 'Access-Control-Allow-Origin': String(origin), 'Vary': 'Origin' };
+  }
+  return { 'Vary': 'Origin' };
 }
 function serveStatic(res, filePath) {
   const ext = path.extname(filePath);
@@ -1947,6 +2008,22 @@ const QQ_HEADERS = {
 };
 const QQ_VIP_INFO_CACHE_TTL_MS = 2 * 60 * 1000;
 const qqVipInfoCache = new Map();
+// 上限与清理策略：缓存键 = uin + 凭据哈希，登录态切换会产生新键。
+// 单用户桌面场景键空间不大，但仍需有界，避免长期运行无界增长。
+const QQ_VIP_INFO_CACHE_MAX_ENTRIES = 64;
+function evictQQVipInfoCache(now) {
+  const at = Number(now) || Date.now();
+  for (const [key, entry] of qqVipInfoCache) {
+    // staleUntil 覆盖了「过期后仍可用于 stale-positive 兜底」的窗口，超过它才算真正无用
+    const keepUntil = Math.max(Number(entry && entry.expiresAt) || 0, Number(entry && entry.staleUntil) || 0);
+    if (keepUntil > 0 && keepUntil <= at) qqVipInfoCache.delete(key);
+  }
+  while (qqVipInfoCache.size > QQ_VIP_INFO_CACHE_MAX_ENTRIES) {
+    const oldest = qqVipInfoCache.keys().next().value;
+    if (oldest === undefined) break;
+    qqVipInfoCache.delete(oldest);
+  }
+}
 
 function requestText(targetUrl, opts, body) {
   opts = opts || {};
@@ -2907,6 +2984,9 @@ async function fetchQQVipStatus(cookieObj, opts) {
           : 0,
         value,
       });
+      // 先清过期项，再按 LRU 兜底裁剪：原先只有 TTL、从不回收，长时间运行会持续累积。
+      // 缓存键含凭据哈希，登录态切换会换键，因此需要显式淘汰。
+      evictQQVipInfoCache(now);
     }
     return value;
   }
@@ -3056,7 +3136,8 @@ async function getQishuiDecryptedAudio(audioUrl) {
     cached.at = Date.now();
     return cached;
   }
-  const up = await fetch(parsed.cleanUrl, { headers: audioProxyHeadersFor(parsed.cleanUrl, '') });
+  // 必须走 fetchProxyValidated（逐跳校验 + enforce 拦截）：此前此处裸 fetch 是 SSRF 绕过点（#auth= 分支短路了 /api/audio 主路径的校验）。
+  const up = await fetchProxyValidated(parsed.cleanUrl, { headers: audioProxyHeadersFor(parsed.cleanUrl, '') }, 3);
   if (!up.ok) throw new Error('Qishui encrypted audio fetch failed: HTTP ' + up.status);
   const encryptedBuffer = Buffer.from(await up.arrayBuffer());
   const result = qishuiAudioDecryptor.decrypt({ encryptedBuffer, spadeA: parsed.auth });
@@ -4496,6 +4577,20 @@ function collectVipStringValues(value, out, depth) {
   return out;
 }
 const neteaseVipInfoCache = new Map();
+// 同上：原实现只有 TTL 没有回收，长时间运行会累积。
+const NETEASE_VIP_INFO_CACHE_MAX_ENTRIES = 64;
+const NETEASE_VIP_INFO_TTL_MS = 5 * 60 * 1000;
+function evictNeteaseVipInfoCache(now) {
+  const at = Number(now) || Date.now();
+  for (const [key, entry] of neteaseVipInfoCache) {
+    if (!entry || at - (Number(entry.at) || 0) >= NETEASE_VIP_INFO_TTL_MS) neteaseVipInfoCache.delete(key);
+  }
+  while (neteaseVipInfoCache.size > NETEASE_VIP_INFO_CACHE_MAX_ENTRIES) {
+    const oldest = neteaseVipInfoCache.keys().next().value;
+    if (oldest === undefined) break;
+    neteaseVipInfoCache.delete(oldest);
+  }
+}
 function activeNeteaseVipPackage(pkg) {
   if (!pkg || typeof pkg !== 'object') return false;
   const expire = Number(pkg.expireTime || pkg.expire_time || pkg.expire || pkg.endTime || 0) || 0;
@@ -4506,7 +4601,7 @@ async function fetchNeteaseVipInfo(userId) {
   userId = String(userId || '').trim();
   if (!userId || !userCookie) return null;
   const cached = neteaseVipInfoCache.get(userId);
-  if (cached && Date.now() - cached.at < 5 * 60 * 1000) return cached.value;
+  if (cached && Date.now() - cached.at < NETEASE_VIP_INFO_TTL_MS) return cached.value;
   let body = null;
   try {
     const r = await vip_info_v2({ uid: userId, cookie: userCookie, timestamp: Date.now() });
@@ -4519,7 +4614,10 @@ async function fetchNeteaseVipInfo(userId) {
       console.warn('[Login] vip_info failed:', err.message);
     }
   }
-  if (body) neteaseVipInfoCache.set(userId, { at: Date.now(), value: body });
+  if (body) {
+    neteaseVipInfoCache.set(userId, { at: Date.now(), value: body });
+    evictNeteaseVipInfoCache(Date.now());
+  }
   return body;
 }
 function normalizeNeteaseVip(profile, account, extra) {
@@ -7224,12 +7322,39 @@ if (pn === '/api/kugou-concept/login/status') {
       const hdr = Object.assign({
         'Content-Type': ct,
         'Cross-Origin-Resource-Policy': 'cross-origin',
-        'Cache-Control': 'public, max-age=86400',
+        // 响应随 Origin 变化（mediaCorsHeaders 会按来源回显 ACAO 并带 Vary: Origin），
+        // 因此不能标记为可被共享缓存复用的 public，改用 private 限定单客户端缓存。
+        'Cache-Control': 'private, max-age=86400',
       }, mediaCorsHeaders(req));
       if (cl) hdr['Content-Length'] = cl;
       res.writeHead(resp.status, hdr);
+      if (!resp.body) { res.end(); return; }
       const reader = resp.body.getReader();
-      while (true) { const c = await reader.read(); if (c.done) break; res.write(c.value); }
+      let coverClientClosed = false;
+      const closeCoverReader = () => {
+        coverClientClosed = true;
+        try { Promise.resolve(reader.cancel()).catch(() => {}); } catch (_) {}
+      };
+      res.once('close', closeCoverReader);
+      try {
+        while (!coverClientClosed) {
+          const c = await reader.read();
+          if (c.done) break;
+          if (!res.write(c.value)) {
+            await new Promise((resolve) => {
+              const onDrain = () => { res.removeListener('close', onClose); resolve(); };
+              const onClose = () => { res.removeListener('drain', onDrain); resolve(); };
+              res.once('drain', onDrain);
+              res.once('close', onClose);
+            });
+            if (coverClientClosed) break;
+          }
+        }
+      } finally {
+        res.removeListener('close', closeCoverReader);
+        if (coverClientClosed) { try { await reader.cancel(); } catch (_) {} }
+      }
+      if (coverClientClosed) return;
       res.end();
     } catch (err) {
       if (err && err.code === 'SSRF_BLOCKED') { res.writeHead(403, mediaCorsHeaders(req)); res.end('Blocked by SSRF policy'); return; }
@@ -7253,7 +7378,8 @@ if (pn === '/api/kugou-concept/login/status') {
         }
       }
       const hdr = audioProxyHeadersFor(audioUrl, range);
-      const up = await fetchProxyValidated(audioUrl, { headers: hdr, signal: AbortSignal.timeout(9000) }, 3);
+      // 总预算放宽到 25s：覆盖「DNS 预解析 + 最多 4 跳 CDN 重定向」全程（原 9s 一次性预算在弱网/多跳下会误杀起播）。
+      const up = await fetchProxyValidated(audioUrl, { headers: hdr, signal: AbortSignal.timeout(25000) }, 3);
       const out = Object.assign({
         'Content-Type': audioContentTypeForUrl(audioUrl, up.headers.get('content-type')),
         'Accept-Ranges': 'bytes',
@@ -7274,7 +7400,17 @@ if (pn === '/api/kugou-concept/login/status') {
         while (!clientClosed) {
           const c = await readStreamChunkWithTimeout(reader, 12000);
           if (c.done) break;
-          res.write(c.value);
+          // 处理背压：write() 返回 false 表示内核/内部缓冲已满，
+          // 此时必须等到 'drain' 再继续，否则缓冲区无界增长。
+          if (!res.write(c.value)) {
+            await new Promise((resolve) => {
+              const onDrain = () => { res.removeListener('close', onClose); resolve(); };
+              const onClose = () => { res.removeListener('drain', onDrain); resolve(); };
+              res.once('drain', onDrain);
+              res.once('close', onClose);
+            });
+            if (clientClosed) break;
+          }
         }
       } finally {
         res.removeListener('close', closeReader);

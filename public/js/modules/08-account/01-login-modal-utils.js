@@ -386,8 +386,8 @@ function renderTopAccountPill(provider, opts) {
   st = st || {};
   var displayName = loggedIn ? ((provider === 'qq' && st.preview) ? '待接入' : providerAccountIdentity(provider, st)) : meta.label;
   var vipTag = providerVipBadge(provider, st, '', true);
-  return '<span class="top-account-pill ' + (loggedIn ? 'online' : 'offline') + '" data-account-provider="' + escHtml(provider) + '">' +
-    '<img src="' + providerAvatarSrc(provider, st) + '" alt="">' +
+  return '<span class="top-account-pill ' + (loggedIn ? 'online' : 'offline') + '" data-account-provider="' + escapeAttr(provider) + '">' +
+    '<img src="' + escapeAttr(providerAvatarSrc(provider, st)) + '" alt="">' +
     '<span class="top-account-name">' + escHtml(displayName) + '</span>' +
     vipTag +
     '</span>';

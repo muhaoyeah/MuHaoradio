@@ -216,7 +216,7 @@ function openColorLabForPicker(picker) {
   var presets = document.getElementById('color-lab-presets');
   if (presets) {
     presets.innerHTML = COLOR_LAB_PRESETS.map(function (p) {
-      return '<button type="button" title="' + escHtml(p.name) + '" style="--c:' + p.color + '" data-color="' + p.color + '"></button>';
+      return '<button type="button" title="' + escapeAttr(p.name) + '" style="--c:' + p.color + '" data-color="' + p.color + '"></button>';
     }).join('');
   }
   pop.classList.add('show');

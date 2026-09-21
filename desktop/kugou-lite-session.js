@@ -4,6 +4,7 @@ const fs = require('fs');
 const http = require('http');
 const https = require('https');
 const path = require('path');
+const credentialCrypto = require('./credential-crypto');
 
 const SESSION_BASENAME = 'kugou-lite-session.json';
 const LEGACY_DOT_BASENAME = '.kugou-lite-session.json';
@@ -72,13 +73,12 @@ function parseSessionRaw(raw) {
 }
 
 function readSessionFile(filePath) {
-  try {
-    if (!filePath || !fs.existsSync(filePath)) return null;
-    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    return parseSessionRaw(raw);
-  } catch (_) {
-    return null;
-  }
+  // 经 credentialCrypto 读取：自动处理 safeStorage 密文与历史明文。
+  // 解密失败时返回 null（按未登录处理），避免把密文当 token 发往上游。
+  const parsed = credentialCrypto.readCredentialJson(filePath, 'kugou-lite-session');
+  if (!parsed) return null;
+  // 保留原有的字段校验/归一化语义（缺 userid 或 token 视为无效会话）
+  return parseSessionRaw(parsed);
 }
 
 function migrateSessionToPrimary() {
@@ -132,7 +132,8 @@ function writeSession(data) {
   };
   const primary = primarySessionPath();
   fs.mkdirSync(path.dirname(primary), { recursive: true });
-  fs.writeFileSync(primary, JSON.stringify(payload, null, 2), 'utf8');
+  // 加密落盘：session 内含账号 token，明文存储可被任意本地进程读取。
+  credentialCrypto.writeCredentialJson(primary, payload, 'kugou-lite-session');
   return readSession();
 }
 

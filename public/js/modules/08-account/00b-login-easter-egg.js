@@ -27,11 +27,29 @@ function loginEasterEggBrowserPreviewUnlocked() {
   try { return localStorage.getItem(LOGIN_EASTER_EGG_BROWSER_PREVIEW_KEY) === '1'; } catch (_) { return false; }
 }
 
+// 脱敏整改 P0-3：此前 ensureLoginEasterEggStatus 被硬编码为「直接返回 true」，
+// 无条件跳过"世界和平"口令门，导致口令门完全失效且其后的 20 余行逻辑成为死代码。
+//
+// 现在恢复真实校验。仅在**显式**设置逃生开关时才跳过，默认关闭：
+//   window.MINERADIO_UNLOCK_LOGIN_GATE === true
+// 或 localStorage 中 mineradio-unlock-login-gate = '1'（便于本地调试）。
+// 注意：这属于调试后门，正式构建不应开启；生产环境应依赖服务端 gate 状态。
+function loginEasterEggDebugBypassEnabled() {
+  try {
+    if (typeof window !== 'undefined' && window.MINERADIO_UNLOCK_LOGIN_GATE === true) return true;
+    return localStorage.getItem('mineradio-unlock-login-gate') === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
 async function ensureLoginEasterEggStatus(force) {
-  // MUHAO_FORCE_UNLOCK: skip world-peace gate so frameless window is usable
-  loginEasterEggState.ready = true;
-  loginEasterEggState.unlocked = true;
-  return true;
+  if (loginEasterEggDebugBypassEnabled()) {
+    console.warn('[security] 登录口令门被调试开关跳过（MINERADIO_UNLOCK_LOGIN_GATE）');
+    loginEasterEggState.ready = true;
+    loginEasterEggState.unlocked = true;
+    return true;
+  }
   if (!force && loginEasterEggState.ready) return loginEasterEggState.unlocked;
   if (!force && loginEasterEggStatusPromise) return loginEasterEggStatusPromise;
   loginEasterEggStatusPromise = (async function () {

@@ -17,7 +17,12 @@ async function apiJson(url, opts) {
     if (timer) clearTimeout(timer);
   }
 }
+// 文本上下文专用的 HTML 转义（等价于 textContent → innerHTML 的序列化）。
+// ⚠️ 不要把它用于属性值：它不转义引号，放进 title="..." / src="..." 等位置无法阻止属性逃逸。
+// 属性值请用 escapeAttr()；URL 属性请先经 safeImgSrc()/safeMediaUrl() 再做 escapeAttr()。
 function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+// 更明确的名字，供新代码与后续重构使用（lint 可据此限制 escHtml 的使用范围）。
+var escText = escHtml;
 // 属性上下文专用转义：escHtml（textContent/innerHTML）不转义引号，不能直接放进 "..." 属性值。
 // 任何拼接进属性值（title="..." / value="..." / data-x="..." / src="..."）的用户或上游数据必须走这里。
 function escapeAttr(s) {
@@ -29,11 +34,38 @@ function escapeAttr(s) {
     .replace(/>/g, '&gt;');
 }
 // 图片/媒体 URL 白名单校验：只允许 http(s)，拒绝 javascript:/data: 等协议；非法返回空串
+// ⚠️ 空值必须显式短路：new URL('', base) 不会抛错，而是解析成当前页面地址，
+// 那样会让「无输入」变成「指向本页」，与 fail-closed 语义不符。
 function safeMediaUrl(u) {
+  var raw = String(u == null ? '' : u).trim();
+  if (!raw) return '';
   try {
-    var url = new URL(String(u || ''), location.href);
+    var url = new URL(raw, location.href);
     return /^https?:$/.test(url.protocol) ? url.href : '';
   } catch (e) { return ''; }
+}
+// <img src> 专用的安全化：在 safeMediaUrl 的协议白名单基础上，
+// 额外放行应用自身的本地媒体协议与内联图片。
+//  - data:image/  自定义封面（用户导入）
+//  - blob:        canvas/File 派生的临时图
+//  - mineradio-local://cover/  本地音乐库封面
+//  - 同源相对/绝对路径（/api/cover、/assets/...）
+// 其余协议（javascript:、vbscript:、非图片 data: 等）一律拒绝。
+// 这是把「URL 协议校验」补齐到属性上下文的关键：escapeAttr 只挡属性逃逸，不挡协议。
+function safeImgSrc(u) {
+  var raw = String(u == null ? '' : u).trim();
+  if (!raw) return '';
+  if (/^data:image\//i.test(raw)) return raw;
+  if (/^blob:/i.test(raw)) return raw;
+  if (/^mineradio-local:\/\/cover\//i.test(raw)) return raw;
+  if (/^mineradio-wallpaper:\/\/(preview|media)\//i.test(raw)) return raw;
+  try {
+    var url = new URL(raw, location.href);
+    if (/^https?:$/.test(url.protocol)) return url.href;
+    // 同源（http/https 之外，仅允许本页协议下的相对与绝对路径）
+    if (url.origin === location.origin && /^(https?|file):$/.test(url.protocol)) return url.href;
+  } catch (e) { /* 非法 URL 一律拒绝 */ }
+  return '';
 }
 function normalizePlaybackQuality(value) {
   value = String(value || '').toLowerCase();
@@ -674,8 +706,8 @@ function renderAudioOutputDeviceUi() {
     var id = device && device.deviceId ? String(device.deviceId) : '';
     var active = id === (audioOutputDeviceId || '');
     var virtualClass = device && device.deviceId && isVirtualMicOutputDevice(device) ? ' virtual' : '';
-    return '<button class="audio-route-node output workflow-node' + virtualClass + (active ? ' active connected' : '') + '" type="button" data-output-primary="' + escHtml(id) + '" title="' + escHtml(audioOutputDeviceLabel(device, index)) + '">' +
-      '<span class="flow-port in" data-output-primary-target="' + escHtml(id) + '" title="连接为主输出"></span><span class="route-node-icon">' + (id ? 'OUT' : 'SYS') + '</span><span class="route-node-text"><b>' + escHtml(audioOutputDeviceLabel(device, index)) + '</b><small>' + (active ? '主输出已连接' : '拖线连接主输出') + '</small></span>' +
+    return '<button class="audio-route-node output workflow-node' + virtualClass + (active ? ' active connected' : '') + '" type="button" data-output-primary="' + escapeAttr(id) + '" title="' + escapeAttr(audioOutputDeviceLabel(device, index)) + '">' +
+      '<span class="flow-port in" data-output-primary-target="' + escapeAttr(id) + '" title="连接为主输出"></span><span class="route-node-icon">' + (id ? 'OUT' : 'SYS') + '</span><span class="route-node-text"><b>' + escHtml(audioOutputDeviceLabel(device, index)) + '</b><small>' + (active ? '主输出已连接' : '拖线连接主输出') + '</small></span>' +
       '<span class="route-node-pulse"></span></button>';
   }).join('');
   var mirrorHtml = mirrorItems.map(function (item) {
@@ -687,8 +719,8 @@ function renderAudioOutputDeviceUi() {
     var rt = audioOutputMirrorRuntimeFor(id);
     var pendingClass = active && (!rt || rt.state !== 'playing') ? ' pending' : '';
     var warningClass = active && rt && (rt.state === 'sink-error' || rt.state === 'play-error' || rt.state === 'unsupported') ? ' warning' : '';
-    return '<button class="audio-route-node mirror workflow-node' + (active ? ' active connected' : '') + pendingClass + warningClass + (disabled ? ' disabled' : '') + '" type="button" data-output-mirror="' + escHtml(id) + '" title="' + escHtml(audioOutputDeviceLabel(device, index)) + '">' +
-      '<span class="flow-port in" data-output-mirror-target="' + escHtml(id) + '" title="连接为实验镜像监听"></span><span class="route-node-icon">MON</span><span class="route-node-text"><b>' + escHtml(audioOutputDeviceLabel(device, index)) + '</b><small>' + escHtml(audioOutputMirrorStatusText(id, active, disabled)) + '</small></span>' +
+    return '<button class="audio-route-node mirror workflow-node' + (active ? ' active connected' : '') + pendingClass + warningClass + (disabled ? ' disabled' : '') + '" type="button" data-output-mirror="' + escapeAttr(id) + '" title="' + escapeAttr(audioOutputDeviceLabel(device, index)) + '">' +
+      '<span class="flow-port in" data-output-mirror-target="' + escapeAttr(id) + '" title="连接为实验镜像监听"></span><span class="route-node-icon">MON</span><span class="route-node-text"><b>' + escHtml(audioOutputDeviceLabel(device, index)) + '</b><small>' + escHtml(audioOutputMirrorStatusText(id, active, disabled)) + '</small></span>' +
       '<span class="route-node-pulse"></span></button>';
   }).join('');
   var bridgeDevice = bridgeId ? audioOutputDeviceById(bridgeId) : null;
@@ -717,8 +749,8 @@ function renderAudioOutputDeviceUi() {
           '<div class="route-lane primary"><div class="route-lane-head"><span class="route-lane-index">01</span><span><b>主监听</b><small>播放器默认输出端</small></span><em class="route-lane-state">' + escHtml(activePrimary ? '已指定' : '系统默认') + '</em></div><div class="route-node-grid">' + primaryHtml + '</div></div>' +
           '<div class="route-lane mirror"><div class="route-lane-head"><span class="route-lane-index">02</span><span><b>镜像监听</b><small>实验功能：复制播放流到另一输出</small></span><em class="route-lane-state">' + escHtml(mirrorStateLabel) + '</em></div><div class="route-node-grid mirror-grid">' + (mirrorHtml || '<div class="audio-route-empty">没有可镜像的输出设备</div>') + '</div><div class="audio-route-note">镜像监听不是系统级多输出，可能有轻微延迟或因平台音源失效；直播/语音输入建议走虚拟声卡桥接。</div></div>' +
           '<div class="route-lane bridge"><div class="route-lane-head"><span class="route-lane-index">03</span><span><b>虚拟麦克风</b><small>' + escHtml(inputHint || '游戏 / 语音软件从对应输入端接收') + '</small></span><em class="route-lane-state">' + escHtml(bridgeEnabled ? '已桥接' : '未接入') + '</em></div>' +
-            '<div class="route-node-grid bridge-grid"><button class="audio-route-node bridge workflow-node' + (bridgeEnabled ? ' active connected' : '') + (!bridgeId ? ' disabled' : '') + '" type="button" data-input-bridge="' + escHtml(bridgeId) + '">' +
-              '<span class="flow-port in" data-input-bridge-target="' + escHtml(bridgeId) + '" title="虚拟麦克风输入"></span><span class="route-node-icon">MIC</span><span class="route-node-text"><b>' + escHtml(bridgeLabel) + '</b><small>' + escHtml(bridgeEnabled ? '已送入虚拟输入链路' : (bridgeId ? '可接入虚拟输入链路' : '需要虚拟声卡线缆')) + '</small></span><span class="route-node-pulse"></span>' +
+            '<div class="route-node-grid bridge-grid"><button class="audio-route-node bridge workflow-node' + (bridgeEnabled ? ' active connected' : '') + (!bridgeId ? ' disabled' : '') + '" type="button" data-input-bridge="' + escapeAttr(bridgeId) + '">' +
+              '<span class="flow-port in" data-input-bridge-target="' + escapeAttr(bridgeId) + '" title="虚拟麦克风输入"></span><span class="route-node-icon">MIC</span><span class="route-node-text"><b>' + escHtml(bridgeLabel) + '</b><small>' + escHtml(bridgeEnabled ? '已送入虚拟输入链路' : (bridgeId ? '可接入虚拟输入链路' : '需要虚拟声卡线缆')) + '</small></span><span class="route-node-pulse"></span>' +
             '</button></div>' +
             '<div class="audio-route-note">' + escHtml(inputHint ? ('输入端: ' + inputHint) : '真实麦克风不能被直接写入；请在游戏或语音软件里选择虚拟声卡的输入端。') + '</div>' +
           '</div>' +

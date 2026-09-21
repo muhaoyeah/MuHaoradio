@@ -154,15 +154,27 @@ function stopKugouLiteRuntime() {
     const proc = child;
     child = null;
     runtimePort = 0;
+    let settled = false;
+    let forceTimer = null;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      // 进程已自行退出时清掉兜底定时器，避免每次 stop 都遗留一个 2s timer
+      if (forceTimer) { clearTimeout(forceTimer); forceTimer = null; }
+      resolve(result);
+    };
     try {
-      proc.once('exit', () => resolve({ ok: true, stopped: true }));
+      proc.once('exit', () => settle({ ok: true, stopped: true }));
       proc.kill();
-      setTimeout(() => {
+      forceTimer = setTimeout(() => {
+        forceTimer = null;
         try { if (!proc.killed) proc.kill('SIGKILL'); } catch (_) {}
-        resolve({ ok: true, stopped: true });
+        settle({ ok: true, stopped: true, forced: true });
       }, 2000);
+      // 定时器不应把应用退出流程挂住
+      if (forceTimer && typeof forceTimer.unref === 'function') forceTimer.unref();
     } catch (e) {
-      resolve({ ok: false, error: e.message || String(e) });
+      settle({ ok: false, error: e.message || String(e) });
     }
   });
 }

@@ -77,8 +77,16 @@ class LoginEasterEggGate {
   }
 
   isUnlocked() {
-    // MUHAO_FORCE_UNLOCK
-    return true;
+    // 脱敏整改 P0-3：此前这里被硬编码为 `return true`，使"世界和平"口令门形同虚设，
+    // 任何本地调用方都能绕过校验读取凭证。现在恢复真实判定。
+    //
+    // 判定条件必须与 server.js 的 loginEasterEggGateUnlocked() 完全一致：
+    //   gateVersion 匹配 && cookieResetVersion 匹配 && resetComplete && unlocked
+    // 否则会出现"主进程放行、HTTP 层拒绝"（或反之）的不一致状态。
+    return this.state.gateVersion === LOGIN_EASTER_EGG_GATE_VERSION
+      && this.state.cookieResetVersion === LOGIN_EASTER_EGG_GATE_VERSION
+      && this.state.resetComplete === true
+      && this.state.unlocked === true;
   }
 
   resolveCredentialRoots() {

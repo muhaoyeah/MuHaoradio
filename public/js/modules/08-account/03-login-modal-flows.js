@@ -342,7 +342,7 @@ function updateLoginProviderCapsuleStatus(provider, btn) {
   if (logo) {
     if (st.loggedIn) {
       logo.classList.add('has-avatar');
-      logo.innerHTML = '<img src="' + providerAvatarSrc(provider, st) + '" alt="">';
+      logo.innerHTML = '<img src="' + escapeAttr(providerAvatarSrc(provider, st)) + '" alt="">';
     } else {
       logo.classList.remove('has-avatar');
       logo.textContent = meta.short;

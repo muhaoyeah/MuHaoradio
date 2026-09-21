@@ -230,8 +230,8 @@ function renderAlbumSongList(songs) {
   detailAlbumSongs = (songs || []).map(cloneSong);
   if (!detailAlbumSongs.length) return '<div class="detail-empty">暂无专辑曲目</div>';
   return '<div class="detail-scroll">' + detailAlbumSongs.map(function (s, i) {
-    var cover = songCoverSrc(s, 80);
-    var coverHtml = cover ? '<img class="artist-song-cover" src="' + escHtml(cover) + '" alt="" onerror="this.style.opacity=0.18">' : '<div class="artist-song-cover"></div>';
+    var cover = safeImgSrc(songCoverSrc(s, 80));
+    var coverHtml = cover ? '<img class="artist-song-cover" src="' + escapeAttr(cover) + '" alt="" onerror="this.style.opacity=0.18">' : '<div class="artist-song-cover"></div>';
     var actionsHtml = '<div class="artist-song-actions">' +
       '<button class="artist-song-action collect" type="button" title="收藏到歌单" aria-label="收藏到歌单" onclick="event.stopPropagation();collectAlbumDetailSong(' + i + ')">' + artistCollectTrayIconSvg() + '</button>' +
       '<button class="artist-song-action next" type="button" title="下一首播放" aria-label="下一首播放" onclick="event.stopPropagation();queueAlbumDetailSongNext(' + i + ')">' + artistNextPlusIconSvg() + '</button>' +
@@ -282,9 +282,9 @@ function renderDetailComments(comments) {
   if (!comments || !comments.length) return '<div class="detail-empty">暂无评论</div>';
   return '<div class="detail-scroll">' + comments.map(function (c) {
     var user = c.user || {};
-    var avatar = user.avatar ? coverUrlWithSize(user.avatar, 64) : '';
+    var avatar = user.avatar ? safeImgSrc(coverUrlWithSize(user.avatar, 64)) : '';
     return '<div class="comment-item">' +
-      (avatar ? '<img class="comment-avatar" src="' + avatar + '" alt="">' : '<div class="comment-avatar"></div>') +
+      (avatar ? '<img class="comment-avatar" src="' + escapeAttr(avatar) + '" alt="">' : '<div class="comment-avatar"></div>') +
       '<div class="comment-main"><div class="comment-meta">' + escHtml(user.nickname || '音乐用户') + (c.likedCount ? (' · ' + c.likedCount + ' 赞') : '') + (c.time ? (' · ' + escHtml(commentTimeLabel(c.time))) : '') + '</div>' +
       '<div class="comment-text">' + escHtml(c.content || '') + '</div></div>' +
       '</div>';
@@ -391,8 +391,8 @@ function renderArtistSongList(songs) {
   detailArtistSongs = (songs || []).map(cloneSong);
   if (!detailArtistSongs.length) return '<div class="detail-empty">暂无热门歌曲</div>';
   return '<div class="detail-scroll">' + detailArtistSongs.map(function (s, i) {
-    var cover = songCoverSrc(s, 80);
-    var coverHtml = cover ? '<img class="artist-song-cover" src="' + escHtml(cover) + '" alt="" onerror="this.style.opacity=0.18">' : '<div class="artist-song-cover"></div>';
+    var cover = safeImgSrc(songCoverSrc(s, 80));
+    var coverHtml = cover ? '<img class="artist-song-cover" src="' + escapeAttr(cover) + '" alt="" onerror="this.style.opacity=0.18">' : '<div class="artist-song-cover"></div>';
     var actionsHtml = '<div class="artist-song-actions">' +
       '<button class="artist-song-action collect" type="button" title="收藏到歌单" aria-label="收藏到歌单" onclick="event.stopPropagation();collectArtistDetailSong(' + i + ')">' + artistCollectTrayIconSvg() + '</button>' +
       '<button class="artist-song-action next" type="button" title="下一首播放" aria-label="下一首播放" onclick="event.stopPropagation();queueArtistDetailSongNext(' + i + ')">' + artistNextPlusIconSvg() + '</button>' +
@@ -444,8 +444,8 @@ function openTrackDetailModal(type, songOverride) {
   var heading = document.getElementById('track-detail-heading');
   var body = document.getElementById('track-detail-body');
   if (!heading || !body) return;
-  var cover = songCoverSrc(song, 180);
-  var coverHtml = cover ? '<img class="detail-cover" src="' + cover + '" alt="">' : '<div class="detail-cover"></div>';
+  var cover = safeImgSrc(songCoverSrc(song, 180));
+  var coverHtml = cover ? '<img class="detail-cover" src="' + escapeAttr(cover) + '" alt="">' : '<div class="detail-cover"></div>';
   var title = song.name || '当前歌曲';
   var artists = currentArtistNames(song);
   var seq = ++trackDetailSeq;
@@ -1491,8 +1491,8 @@ function renderCollectModal() {
   var list = document.getElementById('collect-list');
   if (!current || !list) return;
   var song = collectTargetSong || {};
-  var cover = songCoverSrc(song, 80);
-  current.innerHTML = (cover ? '<img src="' + cover + '" alt="">' : '<div class="cover-placeholder"></div>') +
+  var cover = safeImgSrc(songCoverSrc(song, 80));
+  current.innerHTML = (cover ? '<img src="' + escapeAttr(cover) + '" alt="">' : '<div class="cover-placeholder"></div>') +
     '<div style="min-width:0"><div class="collect-title">' + escHtml(song.name || '当前歌曲') + '</div><div class="collect-sub">' + escHtml(song.artist || '') + '</div></div>';
   var provider = songAccountProvider(song);
   var adapter = songAccountAdapter(provider);
@@ -1516,9 +1516,9 @@ function renderCollectModal() {
     return;
   }
   list.innerHTML = mine.map(function (pl) {
-    var thumb = pl.cover ? coverUrlWithSize(pl.cover, 80) : '';
+    var thumb = pl.cover ? safeImgSrc(coverUrlWithSize(pl.cover, 80)) : '';
     return '<div class="collect-item" data-collect-pid="' + escapeAttr(String(pl.id || '')) + '" onclick="addCollectTargetToPlaylist(this.getAttribute(\'data-collect-pid\'))">' +
-      (thumb ? '<img src="' + thumb + '" alt="">' : '<div class="cover-placeholder"></div>') +
+      (thumb ? '<img src="' + escapeAttr(thumb) + '" alt="">' : '<div class="cover-placeholder"></div>') +
       '<div style="min-width:0"><div class="collect-title">' + escHtml(pl.name || '') + '</div><div class="collect-sub">' + (pl.trackCount || 0) + ' 首</div></div>' +
       '</div>';
   }).join('');

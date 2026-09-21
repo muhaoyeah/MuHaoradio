@@ -1090,7 +1090,41 @@ function extractLiteRecommendSongs(body) {
   return [];
 }
 
+
+function attachGuessLikeReasons(songs, meta) {
+  meta = meta || {};
+  const source = String(meta.source || meta.endpoint || '');
+  const base = /personal\/fm|personal-fm/i.test(source)
+    ? '私人FM品味'
+    : /ai\/recommend|ai-recommend/i.test(source)
+      ? 'AI 口味匹配'
+      : /top\/card|top-card/i.test(source)
+        ? '今日卡片精选'
+        : '听歌品味推荐';
+  const artistCount = new Map();
+  (songs || []).forEach((s) => {
+    const a = String((s && (s.artist || s.singer)) || '').split('/')[0].trim();
+    if (!a) return;
+    artistCount.set(a, (artistCount.get(a) || 0) + 1);
+  });
+  return (songs || []).map((song, index) => {
+    if (!song || typeof song !== 'object') return song;
+    if (song.recommendReason || song.reason) return song;
+    const artist = String(song.artist || song.singer || '').split('/')[0].trim();
+    let reason = base;
+    if (artist && (artistCount.get(artist) || 0) >= 2) {
+      reason = '你常听的 ' + artist;
+    } else if (index < 3) {
+      reason = base + ' · 靠前推荐';
+    } else if (Number(meta.filteredLikedCount) > 0) {
+      reason = '品味池 · 已避开红心';
+    }
+    return Object.assign({}, song, { recommendReason: reason, reason });
+  });
+}
+
 async function handleLiteRecommendations(limit) {
+  let guessLikeReturnSource = 'guess-like';
   const lim = Math.max(4, Math.min(30, Number(limit) || 12));
   const session = kugouLiteSession.readSession();
   if (!session) {
@@ -1242,7 +1276,9 @@ async function handleLiteRecommendations(limit) {
   try {
     for (let round = 0; round < 10 && collected.length < lim; round += 1) {
       const pack = await fetchPersonalFmOnce();
-      await acceptSongs(pack.songs || []);
+    guessLikeReturnSource = (pack && pack.endpoint) || '/personal/fm';
+      guessLikeReturnSource = (pack && pack.endpoint) || guessLikeReturnSource;
+    await acceptSongs(pack.songs || []);
       if (!(pack.songs || []).length) {
         lastErr = (pack.body && (pack.body.error_msg || pack.body.errmsg || pack.body.message)) || 'personal_fm_empty';
         break;
@@ -1252,7 +1288,7 @@ async function handleLiteRecommendations(limit) {
       return {
         provider: 'kugou-lite',
         loggedIn: true,
-        songs: collected.slice(0, lim),
+        songs: attachGuessLikeReasons(collected.slice(0, lim), { source: guessLikeReturnSource, endpoint: guessLikeReturnSource, filteredLikedCount: filteredLiked }),
         updatedAt: Date.now(),
         endpoint: '/personal/fm',
         mode: 'guess-like',
@@ -1271,12 +1307,14 @@ async function handleLiteRecommendations(limit) {
 
   try {
     const pack = await fetchAiRecommend();
+    guessLikeReturnSource = (pack && pack.endpoint) || '/ai/recommend';
+    guessLikeReturnSource = (pack && pack.endpoint) || guessLikeReturnSource;
     await acceptSongs(pack.songs || []);
     if (collected.length) {
       return {
         provider: 'kugou-lite',
         loggedIn: true,
-        songs: collected.slice(0, lim),
+        songs: attachGuessLikeReasons(collected.slice(0, lim), { source: guessLikeReturnSource, endpoint: guessLikeReturnSource, filteredLikedCount: filteredLiked }),
         updatedAt: Date.now(),
         endpoint: pack.endpoint || '/ai/recommend',
         mode: 'guess-like',
@@ -1294,12 +1332,14 @@ async function handleLiteRecommendations(limit) {
 
   try {
     const pack = await fetchTopCard();
+    guessLikeReturnSource = (pack && pack.endpoint) || '/top/card';
+    guessLikeReturnSource = (pack && pack.endpoint) || guessLikeReturnSource;
     await acceptSongs(pack.songs || []);
     if (collected.length) {
       return {
         provider: 'kugou-lite',
         loggedIn: true,
-        songs: collected.slice(0, lim),
+        songs: attachGuessLikeReasons(collected.slice(0, lim), { source: guessLikeReturnSource, endpoint: guessLikeReturnSource, filteredLikedCount: filteredLiked }),
         updatedAt: Date.now(),
         endpoint: pack.endpoint || '/top/card',
         mode: 'guess-like',

@@ -399,9 +399,13 @@ function renderHomeDashboardHero() {
   var fingerprint = homeDashboardDayNumber() + '|' + homeDashboardReviewOffset + '|' + review.text + '|' + review.source;
   if (!hero.querySelector('.daily-review-card')) {
     // MUHAO_PRESERVE_CAROUSEL: append dashboard card without wiping MuHao hero slides
-    var cardHtml = '<div class="daily-review-card">' +
+    var cardHtml = '<div class="daily-review-card daily-review-card--split">' +
+      '<div class="daily-review-topmeta" aria-label="日期与时间">' +
       '<div id="daily-review-date" class="daily-review-date"></div>' +
       '<div id="daily-review-time" class="daily-review-time">--:--</div>' +
+      '</div>' +
+      '<div class="daily-review-photo-breath" aria-hidden="true"></div>' +
+      '<div class="daily-review-dock">' +
       '<div class="daily-review-quote"></div>' +
       '<div class="daily-review-source"></div>' +
       '<div class="daily-review-actions">' +
@@ -409,8 +413,8 @@ function renderHomeDashboardHero() {
       '<button id="home-dashboard-video-choose" type="button" onclick="openHomeDashboardVideoPicker()">选择 MP4</button>' +
       '<button id="home-dashboard-video-clear" type="button" onclick="clearHomeDashboardVideo()" hidden>移除视频</button>' +
       '<button type="button" onclick="openHomePlayerConsole()">展开播放器控制台</button>' +
-      '</div></div>' +
-      '<input id="home-dashboard-video-input" type="file" accept=".mp4,video/mp4" hidden aria-hidden="true">';
+      '</div></div></div>';
+;
     hero.insertAdjacentHTML('beforeend', cardHtml);
     homeDashboardVideoControlsBound = false;
     bindHomeDashboardVideoControls();
@@ -439,6 +443,29 @@ function homeDashboardCurrentSong() {
   } catch (_error) {
     return null;
   }
+}
+
+function homeDashboardRecommendReason(song) {
+  if (!song) return '';
+  var reason = song.recommendReason || song.reason || song.recommend_reason || song.algo_reason || '';
+  reason = String(reason || '').trim();
+  if (reason) return reason;
+  // Soft local fallback when backend has not stamped yet.
+  if ((song.source === 'kugou-lite' || song.provider === 'kugou-lite' || song.platform === 'lite') && (song.mode === 'guess-like' || true)) {
+    return '听歌品味推荐';
+  }
+  return '';
+}
+
+function homeDashboardDiscoveryLine(song) {
+  var artist = homeDashboardSubtitle(song) || '';
+  var reason = homeDashboardRecommendReason(song);
+  if (artist && reason) {
+    // Avoid "周杰伦 · 你常听的 周杰伦" duplication
+    if (reason.indexOf(artist) !== -1) return reason;
+    return artist + ' · ' + reason;
+  }
+  return reason || artist || '品味推荐';
 }
 
 function homeDashboardSubtitle(song) {
@@ -507,8 +534,8 @@ function homeDashboardSetStableBackgroundImage(element, src) {
 
 function homeDashboardCardHtml(card) {
   var cover = card.cover || homeDashboardGeneratedCover(card.title, card.label, card.tone);
-  var artStyle = cover ? ' style="background-image:url(&quot;' + escHtml(cssImageUrl(cover)) + '&quot;)"' : '';
-  return '<button class="home-card ' + escHtml(card.className || '') + '" data-home-tone="' + escHtml(card.tone || 'playlist') + '"' +
+  var artStyle = cover ? ' style="background-image:url(&quot;' + escapeAttr(cssImageUrl(cover)) + '&quot;)"' : '';
+  return '<button class="home-card ' + escapeAttr(card.className || '') + '" data-home-tone="' + escapeAttr(card.tone || 'playlist') + '"' +
     ' type="button" onclick="' + card.action + '">' +
     '<div class="home-card-label">' + escHtml(card.label || '') + '</div>' +
     '<div class="home-card-title">' + escHtml(card.title || '') + '</div>' +
@@ -570,11 +597,9 @@ function renderHomeDashboardQuickCards() {
       className: 'home-card-quick',
     },
     {
-      label: (homeDiscoverState && homeDiscoverState.source === 'kugou-lite') || (typeof hasPlatformLogin === 'function' && hasPlatformLogin('kugou-lite')) || (typeof kugouLiteLoginStatus !== 'undefined' && kugouLiteLoginStatus && kugouLiteLoginStatus.loggedIn) ? 'GUESS LIKE' : 'DAILY MIX',
-      title: (homeDiscoverState && homeDiscoverState.source === 'kugou-lite') || (typeof hasPlatformLogin === 'function' && hasPlatformLogin('kugou-lite')) || (typeof kugouLiteLoginStatus !== 'undefined' && kugouLiteLoginStatus && kugouLiteLoginStatus.loggedIn) ? '猜你喜欢' : '每日推荐',
-      sub: ((homeDiscoverState && homeDiscoverState.source === 'kugou-lite') || (typeof hasPlatformLogin === 'function' && hasPlatformLogin('kugou-lite')) || (typeof kugouLiteLoginStatus !== 'undefined' && kugouLiteLoginStatus && kugouLiteLoginStatus.loggedIn))
-        ? (daily ? ((daily.name || daily.title || '品味推荐') + (homeDashboardSubtitle(daily) ? ' · ' + homeDashboardSubtitle(daily) : '') + ' · 猜你喜欢') : '酷狗概念版 · 根据听歌品味/习惯')
-        : (daily ? ((daily.name || daily.title || '今日歌曲') + (homeDashboardSubtitle(daily) ? ' · ' + homeDashboardSubtitle(daily) : '')) : '使用当前 Mineradio 推荐数据'),
+      label: 'GUESS LIKE',
+      title: '猜你喜欢',
+      sub: daily ? ((daily.name || daily.title || '为你发现新歌') + (homeDashboardSubtitle(daily) ? ' · ' + homeDashboardSubtitle(daily) : '')) : '根据你的听歌品味推荐新歌',
       cover: homeDashboardSongCover(daily, 260),
       action: 'openHomeGuessLikeEntry()',
       tone: 'mix',
@@ -735,7 +760,7 @@ function renderHomeDashboardDiscovery() {
   if (!root) return;
   homeDashboardDiscoveryCache = homeDashboardDiscoverySongs();
   var fingerprint = homeDashboardDiscoveryCache.map(function (song) {
-    return [homeDashboardSongKey(song), song.name || song.title || '', homeDashboardSubtitle(song), homeDashboardSongCover(song, 180)].join('|');
+    return [homeDashboardSongKey(song), song.name || song.title || '', homeDashboardDiscoveryLine(song), homeDashboardSongCover(song, 180)].join('|');
   }).join('||');
   if (!fingerprint) fingerprint = 'empty';
   if (fingerprint === homeDashboardDiscoveryFingerprint) return;
@@ -752,7 +777,7 @@ function renderHomeDashboardDiscovery() {
     return '<button class="home-discovery-song" type="button" onclick="playHomeDashboardDiscoverySong(' + index + ')">' +
       '<span class="home-discovery-cover"' + coverStyle + '></span>' +
       '<span class="home-discovery-song-copy"><span class="home-discovery-song-name">' + escHtml(song.name || song.title || '未知歌曲') + '</span>' +
-      '<span class="home-discovery-song-artist">' + escHtml(homeDashboardSubtitle(song) || 'Mineradio 推荐') + '</span></span></button>';
+      '<span class="home-discovery-song-artist">' + escHtml(homeDashboardDiscoveryLine(song)) + '</span></span></button>';
   }).join('');
 }
 
@@ -911,10 +936,11 @@ function homePlatformRecommendationCard(kind, index, item, label) {
   if (kind === 'netease-playlist') sub = (item.trackCount ? item.trackCount + ' 首' : '推荐歌单') + (item.playCount ? ' · ' + compactHomeCount(item.playCount) + ' 播放' : '');
   else sub = homeDashboardSubtitle(item) || label;
   var cover = item.cover || item.picUrl || homeDashboardSongCover(item, 180) || '';
-  var coverStyle = cover ? ' style="background-image:url(&quot;' + escHtml(cssImageUrl(cover)) + '&quot;)"' : '';
+  var coverStyle = cover ? ' style="background-image:url(&quot;' + escHtml(cssImageUrl(cover)) + '&quot;);width:56px;height:56px;min-width:56px;border-radius:10px;"' : ' style="width:56px;height:56px;min-width:56px;border-radius:10px;"';
+  var badge = kind !== 'netease-playlist' ? '<span style="display:inline-block;font-size:10px;padding:2px 7px;border-radius:6px;background:rgba(0,245,212,.12);color:#00f5d4;letter-spacing:.04em;margin-left:6px;vertical-align:middle;">为你发现</span>' : '';
   return '<button class="home-platform-recommend-card" type="button" data-home-recommend-kind="' + kind + '" data-home-recommend-index="' + index + '">' +
     '<span class="home-platform-recommend-cover"' + coverStyle + '></span>' +
-    '<span class="home-platform-recommend-copy"><span class="home-platform-recommend-label">' + escHtml(label) + '</span>' +
+    '<span class="home-platform-recommend-copy"><span class="home-platform-recommend-label">' + escHtml(label) + badge + '</span>' +
     '<strong>' + escHtml(title) + '</strong><small>' + escHtml(sub) + '</small></span>' +
     '<span class="home-platform-recommend-arrow" aria-hidden="true">›</span></button>';
 }
@@ -1049,8 +1075,8 @@ function renderHomePlatformRecommendations() {
       status.textContent = homeDiscoverState.error ? '网易云推荐读取失败' : '网易云暂未返回推荐内容';
       status.classList.toggle('is-error', !!homeDiscoverState.error);
       list.innerHTML = homePlatformRecommendationEmptyHtml('netease', homeDiscoverState.loggedIn
-        ? '平台本次没有返回推荐内容，未使用搜索结果补位。'
-        : '登录网易云后可读取推荐歌单与每日推荐，未使用关键词搜索替代。');
+        ? '平台暂时没有为你准备推荐内容，稍后再试试'
+        : '登录网易云后可获取个性化推荐歌单');
     }
     return;
   }
@@ -1095,8 +1121,8 @@ function renderHomePlatformRecommendations() {
       status.textContent = feedFailed ? sourceLabel + '推荐读取失败' : sourceLabel + '暂未返回推荐内容';
       status.classList.toggle('is-error', feedFailed);
       list.innerHTML = homePlatformRecommendationEmptyHtml(source, feedState.message || (feedFailed
-        ? '推荐接口当前不可用，未使用关键词搜索补位。'
-        : '连接' + sourceLabel + '后可读取平台推荐，未使用关键词搜索替代。'));
+        ? '推荐服务暂时无法连接，请稍后重试'
+        : '连接' + sourceLabel + '后即可获取个性化推荐'));
     }
     return;
   }

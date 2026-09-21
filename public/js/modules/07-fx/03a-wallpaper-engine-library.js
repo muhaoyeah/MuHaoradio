@@ -1718,7 +1718,15 @@ function loadWallpaperEnginePreviewsNearViewport() {
     var rect = image.getBoundingClientRect();
     var nearby = rect.bottom >= viewport.top - 220 && rect.top <= viewport.bottom + 220;
     if (nearby) {
-      if (!image.getAttribute('src')) image.src = image.dataset.src || '';
+      if (!image.getAttribute('src')) {
+        // 兜底协议校验：data-src 正常由 wallpaperEngineMediaUrl 生成，
+        // 但用页面的实际加载地址再确认一次协议，避免任何脏值直接进入 src。
+        var candidate = String(image.dataset.src || '');
+        var vetted = typeof safeImgSrc === 'function'
+          ? safeImgSrc(candidate)
+          : (/^(https?:|data:image\/|blob:|mineradio-wallpaper:|mineradio-local:\/\/cover\/)/i.test(candidate) ? candidate : '');
+        image.src = vetted || '';
+      }
     } else if (image.dataset.animated === '1') {
       image.removeAttribute('src');
       image.classList.remove('loaded');
@@ -1785,7 +1793,7 @@ function renderWallpaperEngineManualRoots() {
     ? wallpaperEngineLibrarySnapshot.manualRoots : [];
   host.innerHTML = roots.map(function (root) {
     return '<span class="wallpaper-engine-root-chip"><span title="手动导入目录">' + escHtml(root.name || '导入目录') + '</span>' +
-      '<button type="button" data-wallpaper-action="remove-root" data-root-id="' + escHtml(root.id || '') + '" title="移除此索引目录">×</button></span>';
+      '<button type="button" data-wallpaper-action="remove-root" data-root-id="' + escapeAttr(root.id || '') + '" title="移除此索引目录">×</button></span>';
   }).join('');
 }
 
@@ -1814,7 +1822,7 @@ function renderWallpaperEngineLibrary(preserveRenderLimit) {
     var active = wallpaperEngineSelection.active && wallpaperEngineSelection.id === item.id;
     var preview = item.hasPreview ? wallpaperEngineMediaUrl(item, 'preview') : '';
     return '<article class="wallpaper-engine-card' + (favorite ? ' favorite' : '') + (active ? ' active' : '') + '" tabindex="0" role="button" data-wallpaper-id="' + item.id + '">' +
-      (preview ? '<img class="wallpaper-engine-card-preview" data-src="' + escHtml(preview) + '" data-animated="' + (item.previewAnimated ? '1' : '0') + '" alt="" loading="lazy" decoding="async">' : '<div class="wallpaper-engine-card-placeholder"></div>') +
+      (preview ? '<img class="wallpaper-engine-card-preview" data-src="' + escapeAttr(preview) + '" data-animated="' + (item.previewAnimated ? '1' : '0') + '" alt="" loading="lazy" decoding="async">' : '<div class="wallpaper-engine-card-placeholder"></div>') +
       '<button class="wallpaper-engine-card-star' + (favorite ? ' active' : '') + '" type="button" data-wallpaper-action="favorite" data-wallpaper-id="' + item.id + '" title="' + (favorite ? '取消星标' : '星标并置顶') + '">' + (favorite ? '★' : '☆') + '</button>' +
       '<button class="wallpaper-engine-card-settings" type="button" data-wallpaper-action="details" data-wallpaper-id="' + item.id + '" title="读取项目设置">⚙</button>' +
       '<button class="wallpaper-engine-card-hide" type="button" data-wallpaper-action="hide" data-wallpaper-id="' + item.id + '" title="从列表隐藏">×</button>' +
