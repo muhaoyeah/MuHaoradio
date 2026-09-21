@@ -53,19 +53,19 @@
     branchChance: 0.5,       // 节点分叉概率
     reachMin: 0.30,          // 生长高度（占视口高）
     reachMax: 0.62,
-    growStartMs: 260,        // 第一条藤开始生长（等光缝落地）
-    growSpreadMs: 820,       // 各条藤的起跑时间分散度
-    growDurMs: 1450,         // 单条藤生长用时
+    growStartMs: 400,        // delayed beat before vines lead
+    growSpreadMs: 640,       // 各条藤的起跑时间分散度
+    growDurMs: 1680,         // 单条藤生长用时
     bladeEvery: 3,           // 每隔几个节点长一丛草叶
     pollenStartMs: 1050,
     pollenMax: 64,
     pushRadius: 132,         // 指针拨开半径（px）
     pushStrength: 44,        // 拨开最大位移（px）
-    fadeOutMs: 2980,         // 开始淡出（启动页 3500ms 自动进入）
-    zIndex: 4,               // 压在光缝(5)之下、噪点(3)之上
+    fadeOutMs: 3800,         // align with longer AUTO ~2800
+    zIndex: 6,               // 压在光缝(5)之下、噪点(3)之上
 
     /* 入场编排 */
-    introMs: 460,            // 整体呼吸式淡入时长
+    introMs: 320,            // 整体呼吸式淡入时长
     bladeBloomMs: 620,       // 单片草叶绽放用时（easeOutBack 回弹）
 
     /* 三层景深平面：0 远 / 1 中 / 2 近 */

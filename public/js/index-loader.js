@@ -1,8 +1,12 @@
 'use strict';
 
 (function loadMineradioIndexModules() {
-  const moduleCacheBust = String(Date.now());
-  const homeModuleCacheBust = '1789049902';
+  // 打包态（Electron 桌面外壳会给 <html> 加 desktop-shell-root）用固定版本戳走 HTTP 缓存；
+  // 非打包/调试态保留 Date.now() 以便改完代码刷新即生效。
+  const isPackagedShell = document.documentElement.classList.contains('desktop-shell-root');
+  const MODULE_BUILD_TAG = '2.1.0-20260913';
+  const moduleCacheBust = isPackagedShell ? MODULE_BUILD_TAG : String(Date.now());
+  const homeModuleCacheBust = '1789399825';
   const modulePaths = [
     'js/modules/00-state/00-core-stores.js',
     'js/modules/00-state/01-perf-render-state.js',
@@ -113,6 +117,8 @@
 
   function readModule(path) {
     const request = new XMLHttpRequest();
+    // 缓存戳：开发态（http 且未打包）用时间戳强制拿最新模块；
+    // 打包/生产态用固定版本号，让 105 个文件的 HTTP 缓存真正生效（原先每次启动都全量重拉）。
     var bust = 'v=' + moduleCacheBust;
     if (/05-playback\/(03-home-discover-weather|03a-home-dashboard|03b-muhao-home-hero|04-home-empty-wallpaper)\.js$/.test(path)) {
       bust += '&m=' + homeModuleCacheBust;
@@ -127,8 +133,36 @@
     return request.responseText;
   }
 
+  // Collect all module sources, catching failures to show the broken module on splash
+  const sources = [];
+  let failedModule = null;
+  for (let i = 0; i < modulePaths.length; i++) {
+    try {
+      sources.push(readModule(modulePaths[i]));
+    } catch (err) {
+      failedModule = { path: modulePaths[i], error: err.message || String(err), index: i };
+      break;
+    }
+  }
+
+  if (failedModule) {
+    // Show the error on the splash/page so the user knows exactly what broke
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(8,10,16,.92);color:#e8e0d0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:32px;text-align:center;';
+    overlay.innerHTML =
+      '<div style="font-size:15px;color:rgba(255,255,255,.5);letter-spacing:.1em;margin-bottom:12px;">MUHAO RADIO · 模块加载失败</div>' +
+      '<div style="font-size:18px;font-weight:700;margin-bottom:16px;color:#ff6b6b;">无法加载模块 (' + (failedModule.index + 1) + '/' + modulePaths.length + ')</div>' +
+      '<code style="display:block;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:14px 20px;font-size:13px;max-width:600px;word-break:break-all;color:#00f5d4;">' +
+        failedModule.path + '</code>' +
+      '<div style="margin-top:12px;font-size:13px;color:rgba(255,255,255,.45);">' + failedModule.error + '</div>' +
+      '<div style="margin-top:24px;font-size:12px;color:rgba(255,255,255,.35);">请检查该文件是否存在或有语法错误，然后托盘退出冷启动重试</div>';
+    document.body.appendChild(overlay);
+    console.error('[MuHaoradio] Module load failed:', failedModule.path, failedModule.error);
+    return; // Stop loading — don't inject partial scripts
+  }
+
   const script = document.createElement('script');
-  script.text = modulePaths.map(readModule).join('') + '\n//# sourceURL=mineradio-index-modules.js\n';
+  script.text = sources.join('') + '\n//# sourceURL=mineradio-index-modules.js\n';
   document.currentScript.parentNode.insertBefore(script, document.currentScript.nextSibling);
 })();
 

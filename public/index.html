@@ -6,6 +6,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MuHao Radio</title>
   <meta name="referrer" content="no-referrer">
+  <!--
+    CSP：收紧注入面，同时保留应用实际需要的能力。
+      · script-src 'unsafe-inline'：index-loader.js 把 105 个模块拼成内联 <script> 注入执行，
+        改用 nonce 需同步改造加载器，暂以 'unsafe-inline' 保留（已移除 'unsafe-eval'）。
+      · style-src 'unsafe-inline'：大量代码通过 el.style / style="..." 动态设置样式。
+      · img-src 含 data:/blob:：自定义封面与内联封面使用这两种协议；https: 覆盖各平台 CDN 封面。
+      · media-src 含 blob:：音频图使用 captureStream + blob 回退路径。
+      · connect-src 仅本机服务 + jsdelivr（手势识别模型按需拉取）。
+      · frame-src/object-src 全部禁止：本应用不加载任何 iframe / 插件内容。
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self';
+    script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' data: https://fonts.gstatic.com;
+    img-src 'self' data: blob: https:;
+    media-src 'self' blob: data: http://127.0.0.1:3000;
+    connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
+    worker-src 'self' blob:;
+    frame-src 'none';
+    object-src 'none';
+    base-uri 'self';
+    form-action 'none'">
   <link
     href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Inter:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700;900&family=UnifrakturCook:wght@700&display=swap"
     rel="stylesheet">
@@ -13,8 +35,9 @@
   <script src="vendor/music-tempo.min.js"></script>
   <script src="vendor/gsap.min.js"></script>
   <script src="js/preload-mode.js"></script>
-  <link rel="stylesheet" href="css/index.css?v=20260911-enter2">
-  <link rel="stylesheet" href="css/muhao-home-hero.css?v=20260911-enter2">
+    <link rel="stylesheet" href="css/muhao-motion-tokens.css?m=1789431431">
+<link rel="stylesheet" href="css/index.css?m=1789431431">
+  <link rel="stylesheet" href="css/muhao-home-hero.css?m=1789401305">
 </head>
 
 <body>
@@ -81,7 +104,7 @@
     <div id="splash">
       <canvas id="splash-canvas"></canvas>
       <div class="splash-bg-noise"></div>
-      <div class="splash-light-slit" id="splash-light-slit" aria-hidden="true"></div>
+      <div class="splash-bloom" id="splash-bloom" aria-hidden="true"><span class="splash-bloom-core"></span><span class="splash-bloom-ring splash-bloom-ring--a"></span><span class="splash-bloom-ring splash-bloom-ring--b"></span><span class="splash-bloom-ring splash-bloom-ring--c"></span><span class="splash-bloom-petal splash-bloom-petal--1"></span><span class="splash-bloom-petal splash-bloom-petal--2"></span><span class="splash-bloom-petal splash-bloom-petal--3"></span></div>
 
       <!-- 主内容 -->
       <div class="splash-content">
@@ -196,16 +219,21 @@
           <div class="home-hero-dots" id="home-hero-dots" aria-label="slides"></div>
         </div>
       </div>
-          <div class="daily-review-card">
-            <div id="daily-review-date" class="daily-review-date"></div>
-            <div id="daily-review-time" class="daily-review-time">--:--</div>
-            <div class="daily-review-quote">“让今天的声音，从你喜欢的地方开始。”</div>
-            <div class="daily-review-source"> · MuHao Radio</div>
-            <div class="daily-review-actions">
-              <button type="button" onclick="homeDashboardNextReview()">换一条</button>
-              <button id="home-dashboard-video-choose" type="button" onclick="openHomeDashboardVideoPicker()">选择 MP4</button>
-              <button id="home-dashboard-video-clear" type="button" onclick="clearHomeDashboardVideo()" hidden>移除视频</button>
-              <button type="button" onclick="openHomePlayerConsole()">展开播放器控制台</button>
+          <div class="daily-review-card daily-review-card--split">
+            <div class="daily-review-topmeta" aria-label="日期与时间">
+              <div id="daily-review-date" class="daily-review-date"></div>
+              <div id="daily-review-time" class="daily-review-time">--:--</div>
+            </div>
+            <div class="daily-review-photo-breath" aria-hidden="true"></div>
+            <div class="daily-review-dock">
+              <div class="daily-review-quote">“让今天的声音，从你喜欢的地方开始。”</div>
+              <div class="daily-review-source"> · MuHao Radio</div>
+              <div class="daily-review-actions">
+                <button type="button" onclick="homeDashboardNextReview()">换一条</button>
+                <button id="home-dashboard-video-choose" type="button" onclick="openHomeDashboardVideoPicker()">选择 MP4</button>
+                <button id="home-dashboard-video-clear" type="button" onclick="clearHomeDashboardVideo()" hidden>移除视频</button>
+                <button type="button" onclick="openHomePlayerConsole()">展开播放器控制台</button>
+              </div>
             </div>
           </div>
           <input id="home-dashboard-video-input" type="file" accept=".mp4,video/mp4" hidden aria-hidden="true">
@@ -230,7 +258,7 @@
             onclick="openHomeGuessLikeEntry()">
             <div class="home-card-label">GUESS YOU LIKE</div>
             <div class="home-card-title">猜你喜欢</div>
-            <div class="home-card-sub">酷狗概念版品味推荐 · 已排除红心歌</div>
+            <div class="home-card-sub">根据你的听歌品味推荐新歌</div>
             <div class="home-card-art"></div>
           </button>
           <button class="home-card home-card-quick" data-home-tone="playlist" type="button"

@@ -20,6 +20,198 @@
 .home-wave-track span{flex:1;min-width:3px;border-radius:999px;background:linear-gradient(180deg,rgba(255,255,255,.92),color-mix(in srgb,var(--home-accent) 55%,rgba(255,255,255,.35)));height:4px;box-shadow:0 0 12px color-mix(in srgb,var(--home-accent) 35%,transparent)}
 #empty-home .home-hero:has(.home-hero-carousel) .daily-review-card{background:radial-gradient(520px 420px at 20% 12%,rgba(var(--fc-accent-rgb),.12),transparent 64%),linear-gradient(160deg,rgba(26,31,41,.18),rgba(4,6,10,.62))}
 #empty-home .home-hero:has(.home-dashboard-video) .home-hero-carousel,#empty-home .home-hero:has(.home-dashboard-video) .home-hero-carousel-shell,#empty-home .home-hero:has(.home-dashboard-video) .home-audio-reactor{opacity:0;visibility:hidden}
-body.home-shell-entering .home-hero,#empty-home.is-entering .home-hero{animation:home-hero-enter .85s cubic-bezier(.16,1,.3,1) both!important}
+body.home-shell-entering .home-hero,#empty-home.is-entering .home-hero{animation:home-hero-enter var(--muhao-dur-home-hero,850ms) var(--muhao-ease-home-enter,cubic-bezier(0.16,1,0.3,1)) both!important}/* organic-premium-home-hero-enter-v1 */
 @keyframes home-hero-enter{0%{opacity:0;transform:translate3d(0,18px,0) scale(.985);filter:blur(12px)}100%{opacity:1;transform:none;filter:none}}
 @media (prefers-reduced-motion:reduce){body.home-shell-entering .home-hero,#empty-home.is-entering .home-hero{animation:none!important}.home-hero-slide{transition:none}}
+
+
+/* hero-layout-split-v1 */
+/* Cinema split: clock as top glass chip, quote/actions in bottom frosted dock.
+   Keeps portrait faces readable in the middle breath zone. */
+#empty-home .home-hero:has(.home-hero-carousel) .daily-review-card--split {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 18px 18px 14px;
+  background:
+    linear-gradient(180deg, rgba(6, 8, 12, .28) 0%, rgba(6, 8, 12, .08) 28%, rgba(6, 8, 12, .12) 55%, rgba(4, 6, 10, .72) 100%);
+}
+#empty-home .home-hero:has(.home-hero-carousel) .daily-review-card--split::before {
+  opacity: .55;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, .22) 0%, transparent 26%, transparent 48%, rgba(3, 5, 9, .55) 72%, rgba(3, 5, 9, .88) 100%);
+}
+#empty-home .daily-review-topmeta {
+  position: relative;
+  z-index: 3;
+  align-self: flex-start;
+  max-width: min(100%, 280px);
+  padding: 12px 14px 10px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(8, 10, 16, .42);
+  box-shadow: 0 10px 36px rgba(0, 0, 0, .28);
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+}
+#empty-home .daily-review-topmeta .daily-review-date {
+  font-size: 10px;
+  letter-spacing: .14em;
+  color: rgba(255, 255, 255, .7);
+}
+#empty-home .daily-review-topmeta .daily-review-time {
+  margin-top: 4px;
+  font-size: clamp(28px, 3.2vw, 40px);
+  font-weight: 720;
+  line-height: 1;
+  text-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+}
+#empty-home .daily-review-photo-breath {
+  flex: 1 1 auto;
+  min-height: 120px;
+  pointer-events: none;
+}
+#empty-home .daily-review-dock {
+  position: relative;
+  z-index: 3;
+  padding: 16px 16px 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(8, 10, 16, .48);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, .35);
+  backdrop-filter: blur(18px) saturate(1.18);
+  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+}
+#empty-home .daily-review-dock .daily-review-quote {
+  margin-top: 0;
+  font-size: clamp(15px, 1.45vw, 22px);
+  font-weight: 700;
+  line-height: 1.42;
+  max-width: 34ch;
+  text-shadow: 0 6px 22px rgba(0, 0, 0, .55);
+}
+#empty-home .daily-review-dock .daily-review-source {
+  margin-top: 8px;
+}
+#empty-home .daily-review-dock .daily-review-actions {
+  margin-top: 14px;
+}
+/* Soften mid-face clash from carousel slide overlay */
+#empty-home .home-hero-slide::after {
+  background: linear-gradient(180deg, rgba(0, 0, 0, .18), rgba(0, 0, 0, .08) 36%, rgba(0, 0, 0, .22) 58%, rgba(0, 0, 0, .62));
+}
+@media (prefers-reduced-motion: reduce) {
+  #empty-home .daily-review-topmeta,
+  #empty-home .daily-review-dock {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(8, 10, 16, .72);
+  }
+}
+
+
+/* hero-layout-overlap-fix-v2 */
+/* Carousel shell was z-index:3 at bottom:0, painting over the dock buttons.
+   Lift nav/dots into the breath zone; make dock the top hit target. */
+#empty-home .home-hero:has(.daily-review-card--split) .home-hero-carousel-shell {
+  bottom: clamp(156px, 32%, 248px);
+  padding: 0 18px 10px;
+  z-index: 2;
+  gap: 8px;
+}
+#empty-home .home-hero:has(.daily-review-card--split) .home-audio-reactor {
+  bottom: clamp(168px, 34%, 260px);
+  z-index: 1;
+}
+#empty-home .home-hero:has(.daily-review-card--split) .daily-review-card--split {
+  pointer-events: none;
+  padding-bottom: 12px;
+}
+#empty-home .home-hero:has(.daily-review-card--split) .daily-review-topmeta,
+#empty-home .home-hero:has(.daily-review-card--split) .daily-review-dock {
+  pointer-events: auto;
+  z-index: 8;
+}
+#empty-home .home-hero:has(.daily-review-card--split) .daily-review-dock {
+  margin-top: 8px;
+}
+#empty-home .home-hero:has(.daily-review-card--split) .daily-review-dock .daily-review-actions {
+  position: relative;
+  z-index: 9;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+#empty-home .home-hero:has(.daily-review-card--split) .daily-review-dock .daily-review-actions button {
+  position: relative;
+  z-index: 9;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+/* Keep prev/next usable but smaller so they don't eat the dock */
+#empty-home .home-hero:has(.daily-review-card--split) .home-hero-nav {
+  width: 32px;
+  height: 32px;
+  opacity: .85;
+}
+#empty-home .home-hero:has(.daily-review-card--split) .home-hero-carousel-actions {
+  pointer-events: auto;
+}
+
+
+/* hero-dock-transparent-v1 */
+#empty-home .home-hero:has(.daily-review-card--split) .daily-review-card--split {
+  background: linear-gradient(180deg, rgba(6, 8, 12, .16) 0%, rgba(6, 8, 12, .02) 32%, rgba(6, 8, 12, .04) 58%, rgba(4, 6, 10, .28) 100%);
+}
+#empty-home .home-hero:has(.daily-review-card--split) .daily-review-card--split::before {
+  opacity: .28;
+  background: linear-gradient(180deg, rgba(0,0,0,.12) 0%, transparent 30%, transparent 62%, rgba(3,5,9,.22) 82%, rgba(3,5,9,.42) 100%);
+}
+#empty-home .home-hero:has(.daily-review-card--split) .daily-review-dock {
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(8, 10, 16, .16);
+  box-shadow: 0 8px 24px rgba(0,0,0,.14);
+  backdrop-filter: blur(8px) saturate(1.04);
+  -webkit-backdrop-filter: blur(8px) saturate(1.04);
+}
+#empty-home .home-hero:has(.daily-review-card--split) .daily-review-dock .daily-review-quote {
+  text-shadow: 0 2px 14px rgba(0,0,0,.62), 0 0 1px rgba(0,0,0,.85);
+}
+#empty-home .home-hero:has(.daily-review-card--split) .daily-review-dock .daily-review-source {
+  color: rgba(255,255,255,.74);
+  text-shadow: 0 1px 8px rgba(0,0,0,.55);
+}
+#empty-home .home-hero:has(.daily-review-card--split) .daily-review-dock .daily-review-actions button {
+  background: rgba(0,0,0,.16);
+  border-color: rgba(255,255,255,.12);
+  backdrop-filter: blur(6px);
+}
+#empty-home .home-hero:has(.daily-review-card--split) .home-hero-slide::after {
+  background: linear-gradient(180deg, rgba(0,0,0,.12), rgba(0,0,0,.04) 40%, rgba(0,0,0,.10) 68%, rgba(0,0,0,.34));
+}
+@media (prefers-reduced-motion: reduce) {
+  #empty-home .home-hero:has(.daily-review-card--split) .daily-review-dock {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(8, 10, 16, .38);
+  }
+}
+
+
+/* organic-premium-hero-wire-v1 */
+.home-hero-enter,
+.muhao-home-hero,
+.home-hero-slide,
+.home-hero-copy {
+  transition-timing-function: var(--muhao-ease-signature, cubic-bezier(0.4, 0, 0.2, 1));
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-enter,
+  .muhao-home-hero,
+  .home-hero-slide,
+  .home-hero-copy {
+    transition: none !important;
+    animation: none !important;
+  }
+}

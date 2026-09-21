@@ -1,0 +1,66 @@
+/* muhao-motion-tokens — Organic Premium identity (do not delete marker) */
+/* organic-premium-tokens-v1 */
+:root {
+  --muhao-motion-personality: organic-premium;
+  --muhao-ease-signature: cubic-bezier(0.4, 0, 0.2, 1);
+  --muhao-ease-enter: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --muhao-dur-micro: 120ms;
+  --muhao-dur-standard: 220ms;
+  --muhao-dur-major: 480ms;
+  --muhao-dur-splash-beat: 900ms;
+  --muhao-stagger-micro: 32ms;
+  --muhao-stagger-standard: 72ms;
+
+  /* Splash choreography helpers (vines lead → wordmark → soft bloom) */
+  --muhao-splash-vine-lead-ms: 400ms;
+  --muhao-splash-bloom-delay-ms: 720ms;
+  --muhao-splash-mark-on-ms: 700ms;
+  --muhao-splash-bloom-play-ms: 1680ms;
+
+  /* Wordmark settle breathe (scheme 1 — opacity/scale only) */
+  --muhao-dur-wordmark-breathe: 2000ms;
+  --muhao-ease-wordmark-breathe: var(--muhao-ease-signature, cubic-bezier(0.4, 0, 0.2, 1));
+
+  /* Home empty entrance (Hero → copy → cards → rail/dock) — same choreography, tokenized */
+  /* organic-premium-home-entrance-v1 */
+  --muhao-ease-home-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --muhao-dur-home-hero: 850ms;
+  --muhao-dur-home-copy: 550ms;
+  --muhao-dur-home-card: 450ms;
+  --muhao-dur-home-rail: 400ms;
+  --muhao-delay-home-copy: 120ms;
+  --muhao-delay-home-rail: 280ms;
+  --muhao-stagger-home-card: 55ms;
+  --muhao-delay-home-card-1: 50ms;
+  --muhao-delay-home-card-2: 105ms;
+  --muhao-delay-home-card-3: 160ms;
+  --muhao-delay-home-card-4: 215ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --muhao-dur-micro: 1ms;
+    --muhao-dur-standard: 1ms;
+    --muhao-dur-major: 1ms;
+    --muhao-dur-splash-beat: 1ms;
+    --muhao-stagger-micro: 0ms;
+    --muhao-stagger-standard: 0ms;
+    --muhao-splash-vine-lead-ms: 0ms;
+    --muhao-splash-bloom-delay-ms: 0ms;
+    --muhao-splash-mark-on-ms: 0ms;
+    --muhao-splash-bloom-play-ms: 1ms;
+    --muhao-dur-wordmark-breathe: 1ms;
+    --muhao-ease-home-enter: linear;
+    --muhao-dur-home-hero: 1ms;
+    --muhao-dur-home-copy: 1ms;
+    --muhao-dur-home-card: 1ms;
+    --muhao-dur-home-rail: 1ms;
+    --muhao-delay-home-copy: 0ms;
+    --muhao-delay-home-rail: 0ms;
+    --muhao-stagger-home-card: 0ms;
+    --muhao-delay-home-card-1: 0ms;
+    --muhao-delay-home-card-2: 0ms;
+    --muhao-delay-home-card-3: 0ms;
+    --muhao-delay-home-card-4: 0ms;
+  }
+}

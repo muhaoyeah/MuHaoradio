@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 
 document.body.classList.add('splash-active');
 var splashAnimating = true;
@@ -23,11 +23,11 @@ var reduceSplashMotion = false;
 var MUHAO_SPLASH_OS_REDUCED = osPrefersReducedMotion;
 
 // MuHao splash cinema timing (READY>=2000 / AUTO>=3500 / GATE 800)
-var MUHAO_SPLASH_READY_MS = 2000;
-var MUHAO_SPLASH_AUTO_MS = 3500;
-var MUHAO_SPLASH_GATE_MS = 800;
-var MUHAO_SPLASH_MARK_ON_MS = 1100;
-var MUHAO_SPLASH_SETTLE_MS = 2200;
+var MUHAO_SPLASH_READY_MS = 1600;
+var MUHAO_SPLASH_AUTO_MS = 4200;
+var MUHAO_SPLASH_GATE_MS = 1000;
+var MUHAO_SPLASH_MARK_ON_MS = 700;
+var MUHAO_SPLASH_SETTLE_MS = 1400;
 var MUHAO_SPLASH_PEEK_MS = 280;
 var MUHAO_SPLASH_HOLD_COMMIT_MS = 600;
 var MUHAO_SPLASH_MAGNET_MAX = 6;
@@ -264,7 +264,7 @@ function drawMineradioSplashWebgl(elapsed) {
 (function initMineradioSplashCanvas() {
   splashCanvas = document.getElementById('splash-canvas');
   if (!splashCanvas) return;
-  // v3: CSS light-slit only 鈥?no WebGL / particle canvas
+  // v5: Harmony-like center bloom; diagonal light-slit removed.
   splashCanvas.style.display = 'none';
   splashCtx = null;
   splashGl = null;
@@ -409,26 +409,13 @@ function drawMineradioSplash() {
   var exitFade = 1 - splashSmoothstep(3.58, 4.12, elapsed);
   if (lineT > 0 && exitFade > 0) {
     var centerY = splashH * 0.5 + Math.sin(elapsed * 1.4) * 1.6;
+    /* bloom: keep slit metrics for wave/ignition; do not stroke the old slit line */
     var slitW = splashW * (0.16 + lineT * 0.72);
     var left = splashW * 0.5 - slitW * 0.5;
     var right = splashW * 0.5 + slitW * 0.5;
     var coreAlpha = (0.34 + lineT * 0.58) * exitFade;
-    var slitGrad = splashCtx.createLinearGradient(left, centerY, right, centerY);
-    slitGrad.addColorStop(0, 'rgba(255,83,103,0)');
-    slitGrad.addColorStop(0.18, 'rgba(255,83,103,' + (0.18 * exitFade).toFixed(3) + ')');
-    slitGrad.addColorStop(0.50, 'rgba(255,255,255,' + coreAlpha.toFixed(3) + ')');
-    slitGrad.addColorStop(0.68, 'rgba(244,210,138,' + (0.38 * exitFade).toFixed(3) + ')');
-    slitGrad.addColorStop(0.84, 'rgba(122,215,194,' + (0.20 * exitFade).toFixed(3) + ')');
-    slitGrad.addColorStop(1, 'rgba(122,215,194,0)');
-    splashCtx.shadowColor = 'rgba(244,210,138,' + (0.48 * exitFade).toFixed(3) + ')';
-    splashCtx.shadowBlur = 42 + lineT * 42;
-    splashCtx.lineCap = 'round';
-    splashCtx.strokeStyle = slitGrad;
-    splashCtx.lineWidth = 1.4 + lineT * 2.2;
-    splashCtx.beginPath();
-    splashCtx.moveTo(left, centerY);
-    splashCtx.lineTo(right, centerY);
-    splashCtx.stroke();
+
+
 
     var ignition = Math.exp(-Math.pow((elapsed - 0.72) / 0.26, 2));
     if (ignition > 0.018) {
@@ -881,13 +868,18 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
-  // Always play cinema: slit -> delayed mark-on (no flatten) -> settle.
+  // Always play cinema: Harmony-like center bloom -> delayed mark-on -> settle.
   if (MUHAO_SPLASH_OS_REDUCED) {
     try { console.info('[MuHaoSplash] OS prefers-reduced-motion detected; still running cinema (product override)'); } catch (e0) {}
   }
   requestAnimationFrame(function () {
-    s.classList.add('splash-slit-run');
     s.classList.add('splash-cinema-boost');
+    // Let organic vines take the first beat; bloom supports later and softer.
+    setTimeout(function () {
+      if (s && !s.classList.contains('hide') && !s.classList.contains('exiting')) {
+        s.classList.add('splash-bloom-run');
+      }
+    }, 720);
   });
   setTimeout(function () {
     if (s && !s.classList.contains('hide') && !s.classList.contains('exiting')) {
