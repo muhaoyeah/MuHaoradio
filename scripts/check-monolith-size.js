@@ -44,13 +44,14 @@ const BASELINES = {
     "softCapLines": 505,
     "redCapLines": 579
   },
+  // 2026-09-23: refresh — Organic Premium home hero (carousel/audio/enter) 有意体积；旧 stub 26行/3881B 作废。还原点 D:\MuHaoradio\_restore\20260923-1447-check-size-hero-baseline\
   "public/css/muhao-home-hero.css": {
-    "lines": 26,
-    "bytes": 3881,
-    "softCapBytes": 3998,
-    "redCapBytes": 4580,
-    "softCapLines": 27,
-    "redCapLines": 31
+    "lines": 218,
+    "bytes": 10478,
+    "softCapBytes": 10793,
+    "redCapBytes": 12365,
+    "softCapLines": 225,
+    "redCapLines": 258
   }
 };
 function measure(rel) {
