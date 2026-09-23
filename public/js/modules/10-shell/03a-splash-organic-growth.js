@@ -444,22 +444,63 @@
       /* 生长头部柔和淡入，避免出现"硬边推进"的跳变 */
       var headIn = smoothstep(0, 0.30, clamp01((st.grow * total) / total));
 
+      /* 同档 alpha/线宽的连续段合成一条 polyline 再 stroke。
+         原先每段 beginPath+stroke（≈ segmentsPerRoot 次/藤）是冷启动卡顿主因之一；
+         量化合并后 stroke 次数降到个位数级，锥度与头淡公式不变。 */
+      var runStart = -1;
+      var runAlphaKey = -1;
+      var runWidthKey = -1;
+      var runAlpha = 0;
+      var runWidth = 0;
+
+      function flushStemRun(endNode) {
+        if (runStart < 0 || endNode <= runStart) {
+          runStart = -1;
+          return;
+        }
+        ctx.strokeStyle = rgbPrefix + runAlpha.toFixed(3) + ')';
+        ctx.lineWidth = runWidth;
+        ctx.beginPath();
+        ctx.moveTo(nodes[runStart].x, nodes[runStart].y);
+        for (var j = runStart + 1; j <= endNode; j++) {
+          ctx.lineTo(nodes[j].x, nodes[j].y);
+        }
+        ctx.stroke();
+        runStart = -1;
+      }
+
       for (var i = 0; i < visible - 1; i++) {
-        var a = nodes[i];
-        var b = nodes[i + 1];
+        if (!nodes[i] || !nodes[i + 1]) continue;
         var k = i / Math.max(1, total - 1);
         /* 锥度：根部粗、末端细 */
         var taper = (1 - k * 0.72) * (st.depth === 0 ? 1 : 0.7);
         var headFade = (i > visible - 4) ? (visible - i - 1) / 3 : 1;
         var alpha = (0.16 + 0.42 * taper) * headFade * headIn * planeAlpha;
-        if (alpha <= 0.004) continue;
-        ctx.strokeStyle = rgbPrefix + alpha.toFixed(3) + ')';
-        ctx.lineWidth = Math.max(0.35, st.width * taper * headFade * planeWidth);
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.stroke();
+        if (alpha <= 0.004) {
+          flushStemRun(i);
+          continue;
+        }
+        var lineWidth = Math.max(0.35, st.width * taper * headFade * planeWidth);
+        /* alpha ~0.025 档、线宽 0.25px 档：相邻段常同档可合并 */
+        var alphaKey = (alpha * 40 + 0.5) | 0;
+        var widthKey = (lineWidth * 4 + 0.5) | 0;
+        if (runStart < 0) {
+          runStart = i;
+          runAlphaKey = alphaKey;
+          runWidthKey = widthKey;
+          runAlpha = alphaKey / 40;
+          runWidth = Math.max(0.35, widthKey / 4);
+          continue;
+        }
+        if (alphaKey === runAlphaKey && widthKey === runWidthKey) continue;
+        flushStemRun(i);
+        runStart = i;
+        runAlphaKey = alphaKey;
+        runWidthKey = widthKey;
+        runAlpha = alphaKey / 40;
+        runWidth = Math.max(0.35, widthKey / 4);
       }
+      flushStemRun(visible - 1);
     }
 
     function drawBlade(bl, elapsed, sec, dt) {
