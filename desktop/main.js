@@ -6111,6 +6111,8 @@ async function createWindowOnce() {
   const startupShell = path.join(__dirname, 'startup.html');
   // Hold layer-1 long enough for ink seep to read before vines (index) take over.
   const STARTUP_SHELL_MIN_MS = Math.max(0, Math.min(8000, Number(process.env.MINERADIO_STARTUP_SHELL_MIN_MS) || 3200));
+  // Match desktop/startup.html DURATION — defer heavy server boot until soak mostly finishes.
+  const STARTUP_INK_SOAK_MS = Math.max(0, Math.min(STARTUP_SHELL_MIN_MS, Number(process.env.MINERADIO_STARTUP_INK_SOAK_MS) || 1600));
   const shellShownAt = Date.now();
   if (fs.existsSync(startupShell)) {
     try {
@@ -6123,6 +6125,8 @@ async function createWindowOnce() {
     }
   }
 
+  const soakWait = STARTUP_INK_SOAK_MS - (Date.now() - shellShownAt);
+  if (soakWait > 0) await startupDelay(soakWait);
   await ensureLocalServerStarted();
   const shellElapsed = Date.now() - shellShownAt;
   if (shellElapsed < STARTUP_SHELL_MIN_MS) {
