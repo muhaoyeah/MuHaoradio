@@ -1,6 +1,6 @@
 # MuHaoradio IPC 清单（阶段 3）
 
-生成时间: 2026-09-14T13:31:06.988Z
+生成时间: 2026-09-14T13:32:32.553Z
 扫描根目录: `D:\MuHaoradio\resources\app`
 
 ## 摘要

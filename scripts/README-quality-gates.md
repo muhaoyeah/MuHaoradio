@@ -27,3 +27,13 @@ npm run check:monolith
 
 `/api/kugou-lite/recommendations` 必须委托 `handleLiteRecommendations`。
 本门禁检查委托符号存在，并以 SOURCE-OF-TRUTH.md 文档约束「禁止巨型内联 handler」。
+
+
+## Two-copy gate
+
+| script | behavior |
+|--------|----------|
+| `check:two-copies` | `python tools/verify-two-copies.py` (unexpected diff => exit 1) |
+| `check:sync-dry` | `python tools/sync-install-to-mirror.py` preview, no `--apply` |
+
+`npm run check` includes both. On failure: stop; do not force `--apply`.

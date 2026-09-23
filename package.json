@@ -11,14 +11,16 @@
     "start": "electron .",
     "test": "node --test tests/*.test.js",
     "verify": "node tools/verify-project.js",
-    "check": "npm run verify && npm test && npm run test:contracts && npm run check:size && npm run check:monolith",
+    "check": "npm run verify && npm test && npm run test:contracts && npm run check:size && npm run check:monolith && npm run check:two-copies && npm run check:sync-dry",
     "smoke:splash": "node tools/smoke-splash-organic.js",
     "build:win": "electron-builder --win nsis",
     "build:win:dir": "electron-builder --win dir",
     "build:win:internal-beta": "electron-builder --config electron-builder.internal-beta.json --win nsis --publish never",
     "test:contracts": "node --test tests/home-entrance-contract.test.js tests/kugou-lite-recommendations-contract.test.js",
     "check:size": "node scripts/check-monolith-size.js",
-    "check:monolith": "node scripts/check-no-monolith-growth.js"
+    "check:monolith": "node scripts/check-no-monolith-growth.js",
+    "check:two-copies": "python tools/verify-two-copies.py",
+    "check:sync-dry": "python tools/sync-install-to-mirror.py"
   },
   "build": {
     "appId": "com.mineradio.desktop",

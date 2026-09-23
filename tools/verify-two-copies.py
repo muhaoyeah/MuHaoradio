@@ -72,7 +72,7 @@ def main():
     if unexpected:
         print(f"!! 发现 {len(unexpected)} 个非预期差异，请跑 sync-install-to-mirror.py 同步")
         return 1
-    print("✓ 两份代码一致（仅仓库元数据类文件允许不同）")
+    print("OK: 两份代码一致（仅仓库元数据类文件允许不同）")
     return 0
 
 
