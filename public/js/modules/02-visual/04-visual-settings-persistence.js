@@ -300,7 +300,7 @@ function readSavedLyricLayout() {
         raw.uiAccentColor || fxDefaults.uiAccentColor || '#ffffff',
         fxDefaults.uiAccentColor || '#ffffff'
       ),
-      homeAccentColor: normalizeHexColor(raw.homeAccentColor || '#00f5d4'),
+      homeAccentColor: normalizeHexColor(raw.homeAccentColor || '#c4b089'),
       homeIconColor: normalizeHexColor(raw.homeIconColor || fxDefaults.homeIconColor || '#f4d28a', '#f4d28a'),
       visualIconColor: normalizeHexColor(raw.visualIconColor || fxDefaults.visualIconColor || '#7fd8ff', '#7fd8ff'),
       backgroundColorMode: savedBgCustom ? 'custom' : 'cover',
@@ -786,7 +786,7 @@ function saveLyricLayout(opts) {
         fx.uiAccentColor || fxDefaults.uiAccentColor || '#ffffff',
         fxDefaults.uiAccentColor || '#ffffff'
       ),
-      homeAccentColor: normalizeHexColor(fx.homeAccentColor || '#00f5d4'),
+      homeAccentColor: normalizeHexColor(fx.homeAccentColor || '#c4b089'),
       homeIconColor: normalizeHexColor(fx.homeIconColor || '#f4d28a', '#f4d28a'),
       visualIconColor: normalizeHexColor(fx.visualIconColor || '#7fd8ff', '#7fd8ff'),
       backgroundColorMode: fx.backgroundColorMode === 'custom' || fx.backgroundColorCustom ? 'custom' : 'cover',

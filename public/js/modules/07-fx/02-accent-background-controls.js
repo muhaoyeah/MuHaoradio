@@ -1,25 +1,25 @@
 function applyHomeAccentColor() {
-  var color = normalizeHexColor(fx.homeAccentColor || '#00f5d4');
+  var color = normalizeHexColor(fx.homeAccentColor || '#c4b089');
   var rgb = hexToRgb(color);
   document.documentElement.style.setProperty('--home-accent', color);
   document.documentElement.style.setProperty('--home-accent-rgb', rgb.r + ',' + rgb.g + ',' + rgb.b);
 }
 function updateHomeAccentControls() {
   applyHomeAccentColor();
-  var color = normalizeHexColor(fx.homeAccentColor || '#00f5d4');
+  var color = normalizeHexColor(fx.homeAccentColor || '#c4b089');
   var picker = document.getElementById('home-accent-picker');
   var value = document.getElementById('home-accent-value');
   if (picker) picker.value = color;
   if (value) value.textContent = color.toUpperCase();
 }
 function setHomeAccentColor(color, silent) {
-  fx.homeAccentColor = normalizeHexColor(color || '#00f5d4');
+  fx.homeAccentColor = normalizeHexColor(color || '#c4b089');
   updateHomeAccentControls();
   saveLyricLayout({ user: true, reason: 'homeAccentColor' });
   if (!silent) showToast('Home 填充: ' + fx.homeAccentColor.toUpperCase());
 }
 function resetHomeAccentColor() {
-  setHomeAccentColor(fxDefaults.homeAccentColor || '#00f5d4');
+  setHomeAccentColor(fxDefaults.homeAccentColor || '#c4b089');
 }
 function applyIconAccentColors() {
   var homeColor = normalizeHexColor(fx.homeIconColor || fxDefaults.homeIconColor || '#f4d28a', '#f4d28a');

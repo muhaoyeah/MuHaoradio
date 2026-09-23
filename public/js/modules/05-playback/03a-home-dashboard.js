@@ -58,10 +58,10 @@ function homeDashboardCoverInitials(text) {
 
 function homeDashboardGeneratedCover(title, label, tone) {
   var palettes = {
-    search: ['#9db8cf', '#f8f4ee', '#00f5d4'],
-    playlist: ['#9db8cf', '#00f5d4', '#2442ff'],
-    library: ['#00f5d4', '#f8f4ee', '#2442ff'],
-    mix: ['#f8f4ee', '#00f5d4', '#2442ff'],
+    search: ['#9db8cf', '#f8f4ee', '#c4b089'],
+    playlist: ['#9db8cf', '#c4b089', '#2442ff'],
+    library: ['#c4b089', '#f8f4ee', '#2442ff'],
+    mix: ['#f8f4ee', '#c4b089', '#2442ff'],
   };
   var palette = palettes[tone] || palettes.playlist;
   var letters = homeDashboardSvgText(homeDashboardCoverInitials(title || label));
@@ -937,7 +937,7 @@ function homePlatformRecommendationCard(kind, index, item, label) {
   else sub = homeDashboardSubtitle(item) || label;
   var cover = item.cover || item.picUrl || homeDashboardSongCover(item, 180) || '';
   var coverStyle = cover ? ' style="background-image:url(&quot;' + escHtml(cssImageUrl(cover)) + '&quot;);width:56px;height:56px;min-width:56px;border-radius:10px;"' : ' style="width:56px;height:56px;min-width:56px;border-radius:10px;"';
-  var badge = kind !== 'netease-playlist' ? '<span style="display:inline-block;font-size:10px;padding:2px 7px;border-radius:6px;background:rgba(0,245,212,.12);color:#00f5d4;letter-spacing:.04em;margin-left:6px;vertical-align:middle;">为你发现</span>' : '';
+  var badge = kind !== 'netease-playlist' ? '<span style="display:inline-block;font-size:10px;padding:2px 7px;border-radius:6px;background:rgba(196,176,137,.12);color:#c4b089;letter-spacing:.04em;margin-left:6px;vertical-align:middle;">为你发现</span>' : '';
   return '<button class="home-platform-recommend-card" type="button" data-home-recommend-kind="' + kind + '" data-home-recommend-index="' + index + '">' +
     '<span class="home-platform-recommend-cover"' + coverStyle + '></span>' +
     '<span class="home-platform-recommend-copy"><span class="home-platform-recommend-label">' + escHtml(label) + badge + '</span>' +

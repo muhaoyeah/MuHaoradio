@@ -152,7 +152,7 @@
     overlay.innerHTML =
       '<div style="font-size:15px;color:rgba(255,255,255,.5);letter-spacing:.1em;margin-bottom:12px;">MUHAO RADIO · 模块加载失败</div>' +
       '<div style="font-size:18px;font-weight:700;margin-bottom:16px;color:#ff6b6b;">无法加载模块 (' + (failedModule.index + 1) + '/' + modulePaths.length + ')</div>' +
-      '<code style="display:block;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:14px 20px;font-size:13px;max-width:600px;word-break:break-all;color:#00f5d4;">' +
+      '<code style="display:block;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:14px 20px;font-size:13px;max-width:600px;word-break:break-all;color:#c4b089;">' +
         failedModule.path + '</code>' +
       '<div style="margin-top:12px;font-size:13px;color:rgba(255,255,255,.45);">' + failedModule.error + '</div>' +
       '<div style="margin-top:24px;font-size:12px;color:rgba(255,255,255,.35);">请检查该文件是否存在或有语法错误，然后托盘退出冷启动重试</div>';

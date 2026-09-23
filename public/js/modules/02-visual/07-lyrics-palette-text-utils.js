@@ -8,7 +8,7 @@ function uiAccentRgba(alpha, fallback) {
   return 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',' + (alpha == null ? 1 : alpha) + ')';
 }
 function readableInkForHex(hex) {
-  var c = hexToRgb(hex || '#00f5d4');
+  var c = hexToRgb(hex || '#c4b089');
   var lum = (c.r * 0.299 + c.g * 0.587 + c.b * 0.114) / 255;
   return lum > 0.54 ? '#06100f' : '#f8fbff';
 }
