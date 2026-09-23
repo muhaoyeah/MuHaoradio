@@ -1,6 +1,6 @@
 # MuHaoradio IPC 清单（阶段 3）
 
-生成时间: 2026-09-14T13:32:32.553Z
+生成时间: 2026-09-23T17:05:00+08:00（T2 复扫对齐；kugou-lite-health 迁出 main）
 扫描根目录: `D:\MuHaoradio\resources\app`
 
 ## 摘要
@@ -91,7 +91,7 @@
 
 ## 仅 main
 
-- `kugou-lite-health` — desktop/main.js:handle
+- `kugou-lite-health` — desktop/kugou-lite-ipc.js:handle（仍仅 main 注册 / preload 未暴露）
 
 ## 仅 preload
 
@@ -111,7 +111,7 @@
 | `desktop-window-toggle-maximize` | handle | `desktop/main.js` |
 | `kugou-concept-clear-login` | handle | `desktop/main.js` |
 | `kugou-concept-open-login` | handle | `desktop/main.js` |
-| `kugou-lite-health` | handle | `desktop/main.js` |
+| `kugou-lite-health` | handle | `desktop/kugou-lite-ipc.js` |
 | `kugou-music-clear-login` | handle | `desktop/main.js` |
 | `kugou-music-open-login` | handle | `desktop/main.js` |
 | `mineradio-cache-choose-directory` | handle | `desktop/main.js` |
@@ -183,3 +183,10 @@
 2. 「仅 main」里若确认无调用，可标 deprecated，别急着删。
 3. 新 IPC 一律：`desktop/*-ipc.js` 注册 + preload 白名单，不进 `main.js` 巨石。
 4. ESM 试点：挑一个无循环依赖的 `desktop/*.js`（纯工具模块），不要动 renderer 全局脚本加载链。
+
+
+## P2-T2 纪律（2026-09-23）
+
+- 新/改 IPC：**只**在 `desktop/*-ipc.js` 注册，再由 `main.js` 调用 `register*`。
+- 禁止把新通道直接堆进 `main.js` 巨石；禁止 IPC 改动夹带色值 / duration / startup / vines。
+- 本刀已示范：`kugou-lite-health` → `desktop/kugou-lite-ipc.js`。

@@ -4879,15 +4879,19 @@ ipcMain.handle('qq-music-clear-login', async (event) => {
   return clearQQMusicLoginSession();
 });
 
-ipcMain.handle('kugou-lite-health', async (event) => {
-  if (!isTrustedMainWindowIpc(event)) return { ok: false, error: 'UNTRUSTED_SENDER' };
-  try {
-    if (!getKugouLiteStatus().port) await ensureKugouLiteRuntimeStarted();
-    return await healthCheckKugouLite();
-  } catch (error) {
-    return { ok: false, error: error && error.message ? error.message : String(error), status: getKugouLiteStatus() };
-  }
-});
+/* P2-T2: kugou-lite-health lives in desktop/kugou-lite-ipc.js */
+try {
+  const { registerKugouLiteIpc } = require('./kugou-lite-ipc');
+  registerKugouLiteIpc({
+    ipcMain,
+    isTrustedMainWindowIpc,
+    ensureKugouLiteRuntimeStarted,
+    healthCheckKugouLite,
+    getKugouLiteStatus,
+  });
+} catch (error) {
+  console.warn('[IPC] kugou-lite-ipc register skipped:', error && error.message ? error.message : error);
+}
 
 ipcMain.handle('kugou-music-open-login', async (event, options) => {
   // 信任校验函数可能不在当前作用域（单元测试按片段加载 handler），缺失即视为不可信。
