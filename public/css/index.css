@@ -1332,9 +1332,14 @@ body.idle-guide-dragging #canvas-container {
   font-size: clamp(52px, 8.2vw, 104px);
   line-height: .92;
   font-weight: 720;
-  letter-spacing: .08em;
+  /* Track A: keep final tracking static — animating letter-spacing forces layout every frame */
+  letter-spacing: .04em;
+  text-indent: .04em;
   color: #fafaf6;
   text-shadow: 0 18px 64px rgba(0, 0, 0, .55), 0 0 28px rgba(255, 255, 255, .10), 0 0 2px rgba(255, 255, 255, .35);
+  transform: scaleX(1.1);
+  transform-origin: center center;
+  will-change: transform;
   animation: splash-tracking-tighten 2500ms cubic-bezier(.22, 1, .36, 1) forwards
 }
 
@@ -1523,16 +1528,14 @@ body.idle-guide-dragging #canvas-container {
 }
 
 @keyframes splash-tracking-tighten {
-  0% {
-    letter-spacing: .16em
-  }
-
+  /* compositor-only tighten (was letter-spacing .16em → .04em) */
+  0%,
   48% {
-    letter-spacing: .16em
+    transform: scaleX(1.1)
   }
 
   100% {
-    letter-spacing: .04em
+    transform: scaleX(1)
   }
 }
 
