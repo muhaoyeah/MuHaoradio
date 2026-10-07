@@ -16,7 +16,12 @@ var desktopRuntimeState = {
   minimized: false,
   visible: true,
   focused: true,
-  fullscreen: false
+  fullscreen: false,
+  // Knife 3.1: mirrored from main getWindowState (tray hide vs brief invisible).
+  expectedVisible: true,
+  intentionalHide: false,
+  intentionalMinimize: false,
+  expectedVisibleReason: ''
 };
 var renderPowerState = { mode: '', width: 0, height: 0, pixelRatio: 0 };
 var backgroundCacheTrimTimer = 0;
@@ -120,18 +125,28 @@ function runtimeAnalysisStride(kind, length) {
   }
   return 1;
 }
+function isActivelyPlayingAudio() {
+  try {
+    return !!(typeof playing !== 'undefined' && playing
+      && typeof audio !== 'undefined' && audio && !audio.paused && audio.src);
+  } catch (ePlay) { return false; }
+}
+function isMainWindowExpectedVisible() {
+  // Default expected-visible: covers cold start before first state push and
+  // brief Electron invisible glitches that never marked tray-hide.
+  if (!desktopRuntimeState.desktop) return !document.hidden;
+  if (desktopRuntimeState.intentionalHide === true) return false;
+  if (desktopRuntimeState.expectedVisible === false) return false;
+  return true;
+}
 function isDeepBackgroundMode() {
   if (isLiveBackgroundKeepMode()) return false;
-  // Knife3 immersion: while audio is actively playing, never suppress the
-  // beat→visual path via deep-sleep (CSS hides #canvas-container + mainLoop
-  // early-return + 4x4 renderer). Stale minimized/visible during track
-  // switches caused deepSleep=true with playing=true and a static cover.
-  try {
-    if (typeof playing !== 'undefined' && playing
-      && typeof audio !== 'undefined' && audio && !audio.paused && audio.src) {
-      return false;
-    }
-  } catch (ePlayGuard) { }
+  // Knife 3.1: while window is expected-visible AND user is playing, never
+  // deep-sleep. True tray intentional hide / expected-hidden still sleeps
+  // (intentional background play), unlike coarse knife3 playing-never-sleep.
+  if (isMainWindowExpectedVisible() && isActivelyPlayingAudio()) {
+    return false;
+  }
   // Electron may briefly leave document.hidden stale after a tray restore.
   // The native BrowserWindow state is authoritative for desktop power policy;
   // browser-only builds still use the Page Visibility API.
@@ -346,6 +361,11 @@ function collectRuntimePerfSnapshot(now) {
       ? collectFrameGateSnapshot(mainFrameGates)
       : null,
     deepSleep: isDeepBackgroundMode(),
+    expectedVisible: desktopRuntimeState.expectedVisible !== false,
+    intentionalHide: !!desktopRuntimeState.intentionalHide,
+    intentionalMinimize: !!desktopRuntimeState.intentionalMinimize,
+    runtimeMinimized: !!desktopRuntimeState.minimized,
+    runtimeVisible: desktopRuntimeState.visible !== false,
     probe: (window.__mineradioPerf && window.__mineradioPerf.summary)
       ? window.__mineradioPerf.summary()
       : null
@@ -452,6 +472,19 @@ function updateDesktopRuntimeState(state) {
   desktopRuntimeState.visible = state.isVisible !== false;
   desktopRuntimeState.focused = state.isFocused !== false;
   desktopRuntimeState.fullscreen = !!(state.isFullScreen || state.isNativeFullScreen || state.isHtmlFullScreen || state.isWindowFullScreen);
+  // Knife 3.1: intentional visibility from main (markMainWindowExpectedVisible).
+  if (Object.prototype.hasOwnProperty.call(state, 'expectedVisible')) {
+    desktopRuntimeState.expectedVisible = state.expectedVisible !== false;
+  }
+  if (Object.prototype.hasOwnProperty.call(state, 'intentionalHide')) {
+    desktopRuntimeState.intentionalHide = state.intentionalHide === true;
+  }
+  if (Object.prototype.hasOwnProperty.call(state, 'intentionalMinimize')) {
+    desktopRuntimeState.intentionalMinimize = state.intentionalMinimize === true;
+  }
+  if (Object.prototype.hasOwnProperty.call(state, 'expectedVisibleReason')) {
+    desktopRuntimeState.expectedVisibleReason = String(state.expectedVisibleReason || '');
+  }
   updateRenderPowerClasses();
   applyRendererPowerMode();
   if ((desktopRuntimeState.minimized || !desktopRuntimeState.visible) && typeof flushLyricLayoutSave === 'function') {

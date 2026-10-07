@@ -218,6 +218,14 @@ function mainLoopDeepBackgroundSleeping() {
 function mainLoopBackgroundDelayMs() {
   if (!mainLoopDeepBackgroundSleeping()) return 0;
   if (fx && (fx.desktopLyrics || fx.wallpaperMode)) return 250;
+  // Knife 3.1: intentional tray hide may still play audio; keep a low-rate
+  // keepAlive cadence so beat envelopes do not freeze forever under deep-sleep.
+  try {
+    if (typeof isActivelyPlayingAudio === 'function' ? isActivelyPlayingAudio()
+      : (typeof playing !== 'undefined' && playing && audio && !audio.paused && audio.src)) {
+      return 250;
+    }
+  } catch (ePlayDelay) { }
   if (typeof isBackgroundReleaseMode === 'function' && isBackgroundReleaseMode()) return 1500;
   return 1000;
 }
@@ -454,6 +462,11 @@ function animate() {
     var deepDt = Math.min((now - prevTime) / 1000, 0.25);
     prevTime = now;
     tickDeepBackgroundFrame(now, deepDt);
+    // Knife 3.1: tray intentional hide allows deep-sleep while playing; keep
+    // analyser/beat envelopes alive via existing skip-frame keepAlive path.
+    if (typeof keepAliveMainLoopAudioOnSkip === 'function') {
+      keepAliveMainLoopAudioOnSkip(now, deepDt);
+    }
     return;
   }
   // Keep beat/bass envelopes alive even when adaptive cadence skips the visual frame.

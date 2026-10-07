@@ -1866,6 +1866,10 @@ function getWindowState(win) {
     isMinimized: false,
     isVisible: false,
     isFocused: false,
+    expectedVisible: false,
+    intentionalHide: false,
+    intentionalMinimize: false,
+    expectedVisibleReason: '',
     isDesktopEmbedded: false,
     isDesktopInteractive: false,
     isDesktopIconCoexisting: false,
@@ -1884,6 +1888,12 @@ function getWindowState(win) {
     isMinimized: win.isMinimized(),
     isVisible: win.isVisible(),
     isFocused: win.isFocused(),
+    // Knife 3.1: bridge intentional visibility so renderer deep-sleep can
+    // distinguish brief Electron invisible glitches from tray hide.
+    expectedVisible: win.__mineradioExpectedVisible !== false,
+    intentionalHide: win.__mineradioIntentionalHide === true,
+    intentionalMinimize: win.__mineradioIntentionalMinimize === true,
+    expectedVisibleReason: String(win.__mineradioExpectedVisibleReason || ''),
     isDesktopEmbedded: desktopMode.enabled === true,
     isDesktopInteractive: desktopMode.interactive === true,
     isDesktopIconCoexisting: desktopMode.coexisting === true && desktopMode.iconShapeActive === true,

@@ -19,6 +19,16 @@ function muhaoBeatDiagSnapshot(reason) {
     emptyHome: !!(body && body.classList.contains('empty-home-active')),
     wallpaperPreview: !!(body && body.classList.contains('home-wallpaper-preview')),
     deepSleep: !!(body && body.classList.contains('render-deep-sleep')),
+    expectedVisible: (typeof desktopRuntimeState !== 'undefined' && desktopRuntimeState)
+      ? (desktopRuntimeState.expectedVisible !== false) : null,
+    intentionalHide: (typeof desktopRuntimeState !== 'undefined' && desktopRuntimeState)
+      ? !!desktopRuntimeState.intentionalHide : null,
+    intentionalMinimize: (typeof desktopRuntimeState !== 'undefined' && desktopRuntimeState)
+      ? !!desktopRuntimeState.intentionalMinimize : null,
+    runtimeMinimized: (typeof desktopRuntimeState !== 'undefined' && desktopRuntimeState)
+      ? !!desktopRuntimeState.minimized : null,
+    runtimeVisible: (typeof desktopRuntimeState !== 'undefined' && desktopRuntimeState)
+      ? (desktopRuntimeState.visible !== false) : null,
     fastSkipPreload: !!(html && html.classList.contains('startup-fast-skip-preload')),
     playing: !!playing,
     audioPaused: !!(audio && audio.paused),
