@@ -44,6 +44,11 @@ function muhaoBeatDiagSnapshot(reason) {
     smoothEnergy: (typeof smoothEnergy === 'number' ? smoothEnergy : null),
     uBass: (typeof uniforms !== 'undefined' && uniforms && uniforms.uBass ? Number(uniforms.uBass.value) || 0 : null),
     uBeat: (typeof uniforms !== 'undefined' && uniforms && uniforms.uBeat ? Number(uniforms.uBeat.value) || 0 : null),
+    uHasCover: (typeof uniforms !== 'undefined' && uniforms && uniforms.uHasCover ? Number(uniforms.uHasCover.value) : null),
+    uAlpha: (typeof uniforms !== 'undefined' && uniforms && uniforms.uAlpha ? Number(uniforms.uAlpha.value) : null),
+    uColorMixT: (typeof uniforms !== 'undefined' && uniforms && uniforms.uColorMixT ? Number(uniforms.uColorMixT.value) : null),
+    particlesVisible: (typeof particles !== 'undefined' && particles ? !!particles.visible : null),
+    starRiverAlpha: (typeof backgroundStarRiverUniforms !== 'undefined' && backgroundStarRiverUniforms && backgroundStarRiverUniforms.uAlpha ? Number(backgroundStarRiverUniforms.uAlpha.value) : null),
     kickRms: (function () {
       try {
         if (!analyser || typeof beatBandRms !== 'function') return null;

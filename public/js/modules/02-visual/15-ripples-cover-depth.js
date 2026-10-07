@@ -346,6 +346,49 @@ function startColorMixTween(durationMs) {
 var alphaTween = null;
 var floatAlphaTween = null;
 var IDLE_PARTICLE_ALPHA = 0;
+
+function ensureCoverParticlesVisible(reason) {
+  // Force cover particles out of wash-black: cancel pending color-mix and snap alpha/mix to full.
+  if (!uniforms) return;
+  if (typeof colorMixTween !== 'undefined' && colorMixTween) {
+    cancelAnimationFrame(colorMixTween.raf);
+    colorMixTween = null;
+  }
+  uniforms.uAlpha.value = 1;
+  if (uniforms.uColorMixT) uniforms.uColorMixT.value = 1;
+  // Stale pinned free-cam (locked, not flying) hijacks camera.quaternion every frame via
+  // applyFreeCameraToCamera — orbit baseline ignored, cover NDC drops to 0. Unlock on cover ensure.
+  if (typeof freeCamera !== 'undefined' && freeCamera && freeCamera.locked && !freeCamera.active && !freeCamera.resetTween) {
+    freeCamera.locked = false;
+    freeCamera.active = false;
+    freeCamera.keys = {};
+    if (freeCamera.velocity) freeCamera.velocity.set(0, 0, 0);
+    if (typeof releaseFreeCameraPointerLock === 'function') releaseFreeCameraPointerLock();
+    if (typeof applyPresetOrbitBaseline === 'function') {
+      applyPresetOrbitBaseline(typeof fx !== 'undefined' && fx ? fx.preset : 0, { syncCurrent: true });
+    }
+    if (typeof orbit !== 'undefined' && orbit) {
+      if (orbit.lookAt && orbit.lookAt.set) orbit.lookAt.set(0, 0, 0);
+      orbit.centerLocked = true;
+      orbit.recentering = false;
+    }
+    var pose = typeof getDefaultFreeCameraResetPose === 'function' ? getDefaultFreeCameraResetPose() : null;
+    if (pose && pose.position && freeCamera.position) {
+      freeCamera.position.copy(pose.position);
+      freeCamera.yaw = Number(pose.yaw) || 0;
+      freeCamera.pitch = Number(pose.pitch) || 0;
+      freeCamera.roll = Number(pose.roll) || 0;
+      if (pose.fov != null) freeCamera.fov = pose.fov;
+    } else {
+      freeCamera.yaw = 0;
+      freeCamera.pitch = 0;
+      freeCamera.roll = 0;
+    }
+    if (typeof saveFreeCameraState === 'function') saveFreeCameraState();
+    if (typeof updateFreeCameraHint === 'function') updateFreeCameraHint();
+  }
+}
+
 function tweenParticleAlpha(from, to, durationMs) {
   if (alphaTween) cancelAnimationFrame(alphaTween.raf);
   var start = performance.now();
@@ -472,6 +515,7 @@ function recoverVisualsAfterBackground(reason) {
   if (audio && audio.src && !audio.paused && ((uniforms.uLoading.value || 0) > 0.015 || loadingTween || loadingHideTimer)) {
     forceLoadingSettled(reason || 'restore');
   }
+  if (typeof ensureCoverParticlesVisible === 'function') ensureCoverParticlesVisible(reason || 'background-restore');
   if (typeof markRenderInteraction === 'function') markRenderInteraction('restore', 1100);
 }
 
@@ -569,6 +613,10 @@ function updateControlTrackInfo(song) {
 function applyCoverCanvas(cv, thumbSrc, opts) {
   opts = opts || {};
   if (!cv || !coverApplyStillCurrent(opts)) return;
+  // First cover onto empty field: skip dark prev mix (uHasCover was <0.5).
+  if (uniforms && uniforms.uHasCover && uniforms.uHasCover.value < 0.5 && !opts.noCoverTransition) {
+    opts = Object.assign({}, opts, { noCoverTransition: true });
+  }
   var token = ++coverProcessToken;
   if (opts.coverSource && opts.coverSourceKind) {
     currentCoverSource = { kind: opts.coverSourceKind, src: opts.coverSource };

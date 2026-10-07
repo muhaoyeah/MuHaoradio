@@ -1143,6 +1143,11 @@ async function playQueueAt(idx, opts) {
       if (customCover) applyCoverDataUrl(customCover, coverOpts);
       else loadCoverFromUrl(song.cover ? coverUrlWithSize(song.cover, 400) : '', coverOpts);
     });
+    // Force cover particles visible BEFORE local early-return (local path skips firstVisualPlay tween below).
+    safePlaybackStep('ensure-cover-particles-visible', function () {
+      if (typeof ensureCoverParticlesVisible === 'function') ensureCoverParticlesVisible(firstVisualPlay ? 'first-visual' : 'playback-start');
+      if (firstVisualPlay) firstPlayDone = true;
+    });
     safePlaybackStep('trial-banner-reset', function () { document.getElementById('trial-banner').classList.remove('show'); });
     if (song.type === 'local' || song.source === 'local' || song.localUrl) {
       markPlayPhase('local-audio');
@@ -1159,7 +1164,8 @@ async function playQueueAt(idx, opts) {
     if (firstVisualPlay) {
       safePlaybackStep('first-visual-alpha', function () {
         firstPlayDone = true;
-        tweenParticleAlpha(uniforms.uAlpha.value || 0, 1.0, 220);
+        if (typeof ensureCoverParticlesVisible === 'function') ensureCoverParticlesVisible('first-visual-polish');
+        else if (uniforms) uniforms.uAlpha.value = 1;
       });
     }
 
