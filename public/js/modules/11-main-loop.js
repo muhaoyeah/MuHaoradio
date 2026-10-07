@@ -487,7 +487,7 @@ function animate() {
     if (now - splashWarmRenderLast > 520) {
       splashWarmRenderLast = now;
       var splashRenderPerfStart = performance.now();
-      renderer.render(scene, camera);
+      muhaoSafeStage('renderer-render-splash', function () { renderer.render(scene, camera); });
       if (perfProbe && perfProbe.markSince) perfProbe.markSince('renderer.render.splash', splashRenderPerfStart);
     }
     var splashFrameCostMs = performance.now() - framePerfStart;
@@ -730,7 +730,7 @@ function animate() {
   uniforms.uVinylSpin.value = (uniforms.uVinylSpin.value + dt * vinylSpinSpeed) % (Math.PI * 2);
 
   var visualUniformPerfStart = performance.now();
-  updateParticlePointerFrame();
+  muhaoSafeStage('particle-pointer', function () { updateParticlePointerFrame(); });
   uniforms.uBass.value = bass;
   uniforms.uMid.value = mid;
   uniforms.uTreble.value = treble;
@@ -752,8 +752,10 @@ function animate() {
   if (perfProbe && perfProbe.markSince) perfProbe.markSince('visual.uniforms-preset', visualUniformPerfStart);
 
   var coverLayerPerfStart = performance.now();
-  updateRipples(dt);
-  updateFloatLayer(dt);
+  muhaoSafeStage('cover-layers', function () {
+    updateRipples(dt);
+    updateFloatLayer(dt);
+  });
   if (perfProbe && perfProbe.markSince) perfProbe.markSince('visual.cover-layers', coverLayerPerfStart);
   var shelfPerfStart = performance.now();
   var shelfStepDt = consumeFrameGate(mainFrameGates.shelf, now, dt, targetMainShelfFps(now), false, 'shelf-manager');
@@ -761,7 +763,7 @@ function animate() {
   if (perfProbe && perfProbe.markSince) perfProbe.markSince('visual.shelf-manager', shelfPerfStart);
   var lyricsParticlePerfStart = performance.now();
   var lyricsParticleStepDt = consumeFrameGate(mainFrameGates.lyricsParticles, now, dt, targetMainLyricsParticleFps(now), false, 'lyrics-particles');
-  if (lyricsParticleStepDt > 0) tickLyricsParticles();
+  if (lyricsParticleStepDt > 0) muhaoSafeStage('lyrics-particles', function () { tickLyricsParticles(); });
   if (perfProbe && perfProbe.markSince) perfProbe.markSince('visual.lyrics-particles', lyricsParticlePerfStart);
   var homeAudioPerfStart = performance.now();
   var homeAudioStepDt = consumeFrameGate(mainFrameGates.homeAudio, now, dt, targetMainHomeAudioFps(now), false, 'home-audio');
@@ -770,7 +772,7 @@ function animate() {
 
   // 电影镜头
   var cameraPerfStart = performance.now();
-  updateCinema(dt);
+  muhaoSafeStage('update-cinema', function () { updateCinema(dt); });
   updateFreeCamera(dt);
   updateCamera();
   applySkullCameraPose(dt);
@@ -802,7 +804,7 @@ function animate() {
   }
   var skullPerfStart = performance.now();
   var skullStepDt = consumeFrameGate(mainFrameGates.skullParticles, now, dt, targetMainSkullParticleFps(now), false, 'skull-particles');
-  if (skullStepDt > 0) updateSkullParticleLayer(skullStepDt);
+  if (skullStepDt > 0) muhaoSafeStage('skull-particles', function () { updateSkullParticleLayer(skullStepDt); });
   if (perfProbe && perfProbe.markSince) perfProbe.markSince('visual.skull-particles', skullPerfStart);
   var sonicPerfStart = performance.now();
   if (window.MineradioSonicTopography) {
@@ -845,7 +847,7 @@ function animate() {
   }
 
   var rendererPerfStart = performance.now();
-  renderer.render(scene, camera);
+  muhaoSafeStage('renderer-render', function () { renderer.render(scene, camera); });
   if (perfProbe && perfProbe.markSince) perfProbe.markSince('renderer.render', rendererPerfStart);
   var frameCostMs = performance.now() - framePerfStart;
   if (typeof sampleAdaptiveFrameCost === 'function') {

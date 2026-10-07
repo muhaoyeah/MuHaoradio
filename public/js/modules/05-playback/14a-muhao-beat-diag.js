@@ -99,17 +99,20 @@ function muhaoBeatDiagOnPlay(reason) {
   if (window.__muhaoErrCaptureInstalled) return;
   window.__muhaoErrCaptureInstalled = true;
   var lastByKey = Object.create(null);
-  function muhaoReportRuntimeError(kind, msg, src, line, col, errObj) {
+  function muhaoReportRuntimeError(kind, msg, src, line, col, errObj, extra) {
     try {
       var nowMs = performance.now();
       var key = String(kind) + '|' + String(msg == null ? '' : msg).slice(0, 120);
+      if (extra && extra.resourceLikely) {
+        key += '|res|' + String(extra.tagName || '') + '|' + String(extra.srcOrHref || '').slice(0, 80);
+      }
       var last = lastByKey[key] || 0;
       if (nowMs - last < 1500) return;
       lastByKey[key] = nowMs;
       var stack = '';
       try { stack = errObj && errObj.stack ? String(errObj.stack).slice(0, 800) : ''; } catch (eS) { stack = ''; }
-      muhaoBeatDiagAppendLine(JSON.stringify({
-        kind: 'window-error',
+      var payload = {
+        kind: (extra && extra.resourceLikely) ? 'resource-error' : 'window-error',
         via: String(kind),
         message: String(msg == null ? '' : msg).slice(0, 400),
         source: String(src || '').slice(0, 220),
@@ -117,11 +120,41 @@ function muhaoBeatDiagOnPlay(reason) {
         col: col || 0,
         stack: stack,
         at: new Date().toISOString()
-      }));
+      };
+      if (extra && extra.resourceLikely) {
+        payload.resourceLikely = true;
+        if (extra.tagName) payload.tagName = String(extra.tagName);
+        if (extra.srcOrHref) payload.srcOrHref = String(extra.srcOrHref).slice(0, 320);
+      }
+      muhaoBeatDiagAppendLine(JSON.stringify(payload));
     } catch (e) { }
   }
   window.addEventListener('error', function (ev) {
-    muhaoReportRuntimeError('error', ev && ev.message, ev && ev.filename, ev && ev.lineno, ev && ev.colno, ev && ev.error);
+    var msg = ev && ev.message;
+    var lineNo = ev && ev.lineno;
+    var errObj = ev && ev.error;
+    var target = ev && ev.target;
+    var targetIsElement = !!(target && target.nodeType === 1);
+    // Resource load failures often surface as ErrorEvent with empty message, lineno 0,
+    // and either null error or an Element target (script/img/link/audio/etc).
+    var resourceLikely = (msg == null || String(msg) === '')
+      && (!lineNo || lineNo === 0)
+      && (errObj == null || targetIsElement);
+    var extra = null;
+    if (resourceLikely) {
+      var srcOrHref = '';
+      try {
+        if (targetIsElement) {
+          srcOrHref = target.currentSrc || target.src || target.href || '';
+        }
+      } catch (eT) { srcOrHref = ''; }
+      extra = {
+        resourceLikely: true,
+        tagName: targetIsElement ? (target.tagName || '') : '',
+        srcOrHref: srcOrHref
+      };
+    }
+    muhaoReportRuntimeError('error', msg, ev && ev.filename, lineNo, ev && ev.colno, errObj, extra);
   }, true);
   window.addEventListener('unhandledrejection', function (ev) {
     var r = ev && ev.reason;
