@@ -17,7 +17,7 @@
 .home-hero:hover .home-hero-nav,.home-hero:focus-within .home-hero-nav{opacity:1}
 .home-audio-reactor{position:absolute;left:18px;right:18px;bottom:58px;z-index:3;height:48px;pointer-events:none;opacity:calc(0.35 + (var(--home-audio-energy) * 0.55));transform:translate3d(0,calc((1 - var(--home-audio-bass)) * 4px),0)}
 .home-wave-track{position:absolute;left:0;right:0;bottom:5px;height:40px;display:flex;align-items:flex-end;gap:4px;opacity:.92}
-.home-wave-track span{flex:1;min-width:3px;border-radius:999px;background:linear-gradient(180deg,rgba(255,255,255,.92),color-mix(in srgb,var(--home-accent) 55%,rgba(255,255,255,.35)));height:4px;box-shadow:0 0 12px color-mix(in srgb,var(--home-accent) 35%,transparent)}
+.home-wave-track span{flex:1;min-width:3px;border-radius:999px;background:linear-gradient(180deg,rgba(255,255,255,.92),color-mix(in srgb,var(--play-shell-accent) 55%,rgba(255,255,255,.35)));height:4px;box-shadow:0 0 12px color-mix(in srgb,var(--play-shell-accent) 35%,transparent)}
 #empty-home .home-hero:has(.home-hero-carousel) .daily-review-card{background:radial-gradient(520px 420px at 20% 12%,rgba(var(--fc-accent-rgb),.12),transparent 64%),linear-gradient(160deg,rgba(26,31,41,.18),rgba(4,6,10,.62))}
 #empty-home .home-hero:has(.home-dashboard-video) .home-hero-carousel,#empty-home .home-hero:has(.home-dashboard-video) .home-hero-carousel-shell,#empty-home .home-hero:has(.home-dashboard-video) .home-audio-reactor{opacity:0;visibility:hidden}
 body.home-shell-entering .home-hero,#empty-home.is-entering .home-hero{animation:home-hero-enter var(--muhao-dur-home-hero,850ms) var(--muhao-ease-home-enter,cubic-bezier(0.16,1,0.3,1)) both!important}/* organic-premium-home-hero-enter-v1 */

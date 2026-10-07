@@ -310,6 +310,8 @@ html.desktop-shell-root body {
   --champagne-deep: #9a6f2c;
   --home-accent: #c4b089;
   --home-accent-rgb: 196, 176, 137;
+  --play-shell-accent: #00f5d4;
+  --play-shell-accent-rgb: 0, 245, 212;
   --visual-tint: #9db8cf;
   --source-netease: #d95b67;
   --source-qq: var(--home-accent);
@@ -2647,8 +2649,8 @@ body.home-wallpaper-preview #canvas-container {
   flex: 1;
   min-width: 3px;
   border-radius: 999px;
-  background: linear-gradient(180deg, #fff, var(--home-accent));
-  box-shadow: 0 0 12px color-mix(in srgb, var(--home-accent) 55%, transparent);
+  background: linear-gradient(180deg, #fff, var(--play-shell-accent));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--play-shell-accent) 55%, transparent);
   height: 5px;
   transform-origin: bottom;
   transition: height .08s linear, opacity .08s linear
@@ -5270,7 +5272,7 @@ body.home-controls-locked #bottom-bar {
   height: 4px;
   border-radius: 50%;
   background: rgba(255, 255, 255, .92);
-  box-shadow: 0 0 12px rgba(var(--home-accent-rgb), .36);
+  box-shadow: 0 0 12px rgba(var(--play-shell-accent-rgb), .36);
   pointer-events: none;
   animation: progress-particle-fade .62s ease-out forwards
 }
@@ -5608,7 +5610,7 @@ body.home-controls-locked #bottom-bar {
 .control-title:hover,
 .control-artist:hover {
   color: #fff;
-  text-shadow: 0 0 16px rgba(var(--home-accent-rgb), .20)
+  text-shadow: 0 0 16px rgba(var(--play-shell-accent-rgb), .20)
 }
 
 .ctrl-btn {
@@ -5646,7 +5648,7 @@ body.home-controls-locked #bottom-bar {
   color: #fff;
   background: rgba(255, 255, 255, .045);
   transform: translateY(-1px);
-  text-shadow: 0 0 10px rgba(var(--home-accent-rgb), .12);
+  text-shadow: 0 0 10px rgba(var(--play-shell-accent-rgb), .12);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045)
 }
 
@@ -5656,7 +5658,7 @@ body.home-controls-locked #bottom-bar {
 
 .ctrl-btn.active {
   color: rgba(210, 244, 241, .90);
-  text-shadow: 0 0 12px rgba(var(--home-accent-rgb), .16)
+  text-shadow: 0 0 12px rgba(var(--play-shell-accent-rgb), .16)
 }
 
 .ctrl-btn.liked {
@@ -5676,7 +5678,7 @@ body.home-controls-locked #bottom-bar {
 #play-mode-btn[data-mode="shuffle"],
 #play-mode-btn[data-mode="single"] {
   color: rgba(210, 244, 241, .90);
-  text-shadow: 0 0 12px rgba(var(--home-accent-rgb), .15)
+  text-shadow: 0 0 12px rgba(var(--play-shell-accent-rgb), .15)
 }
 
 #play-mode-btn.mode-switching #play-mode-icon {
@@ -6898,9 +6900,9 @@ body:not(.controls-visible) .lyric-timing-control::before,
 }
 
 .mini-queue-item.now {
-  border-color: rgba(var(--home-accent-rgb), .36);
-  background: rgba(var(--home-accent-rgb), .075);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 10px 28px rgba(var(--home-accent-rgb), .06)
+  border-color: rgba(var(--play-shell-accent-rgb), .36);
+  background: rgba(var(--play-shell-accent-rgb), .075);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 10px 28px rgba(var(--play-shell-accent-rgb), .06)
 }
 
 .mini-queue-item img,
@@ -6956,7 +6958,7 @@ body:not(.controls-visible) .lyric-timing-control::before,
 }
 
 .mini-queue-remove.mini-queue-next:hover {
-  background: rgba(var(--home-accent-rgb), .16);
+  background: rgba(var(--play-shell-accent-rgb), .16);
   color: #eafffb
 }
 
@@ -6971,7 +6973,7 @@ body:not(.controls-visible) .lyric-timing-control::before,
   height: 56px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, .06);
-  background: linear-gradient(90deg, rgba(255, 255, 255, .035), rgba(var(--home-accent-rgb), .085), rgba(255, 255, 255, .035));
+  background: linear-gradient(90deg, rgba(255, 255, 255, .035), rgba(var(--play-shell-accent-rgb), .085), rgba(255, 255, 255, .035));
   background-size: 220% 100%;
   animation: queue-shimmer 1.05s linear infinite
 }
