@@ -371,6 +371,11 @@ async function completeAudioPlayStart(opts, reason, expectedMedia, expectedToken
   try { if (typeof muhaoBeatDiagOnPlay === 'function') muhaoBeatDiagOnPlay(reason || 'playback-started'); } catch (eDiag) {}
   switchPlaybackVisualToEmily();
   playing = true; setPlayIcon(true);
+  try {
+    if (typeof wakeRenderPowerForActivePlayback === 'function') {
+      wakeRenderPowerForActivePlayback(reason || 'playback-started');
+    }
+  } catch (eWakePlay) {}
   if (typeof markStageLyricsPlaybackResume === 'function') markStageLyricsPlaybackResume(reason || 'playback-started');
   if (opts.trackSwitch) primeCinemaAfterTrackStart(reason || 'track-switch');
   if (opts.trackSwitch && !opts.resumeRecovery && typeof resetPlaybackFreshUrlRecoveryBudget === 'function') {
@@ -430,6 +435,11 @@ async function resumePausedAudioFast(opts) {
     try { if (typeof muhaoBeatDiagOnPlay === 'function') muhaoBeatDiagOnPlay('manual-resume-fast'); } catch (eDiag2) {}
     switchPlaybackVisualToEmily();
     playing = true; setPlayIcon(true);
+    try {
+      if (typeof wakeRenderPowerForActivePlayback === 'function') {
+        wakeRenderPowerForActivePlayback('manual-resume-fast');
+      }
+    } catch (eWakeResume) {}
     if (typeof markStageLyricsPlaybackResume === 'function') {
       setTimeout(function () {
         if (isSameAudioPlaybackTarget(media, src) && token === trackSwitchToken && !media.paused && !media.ended) {

@@ -122,6 +122,16 @@ function runtimeAnalysisStride(kind, length) {
 }
 function isDeepBackgroundMode() {
   if (isLiveBackgroundKeepMode()) return false;
+  // Knife3 immersion: while audio is actively playing, never suppress the
+  // beat→visual path via deep-sleep (CSS hides #canvas-container + mainLoop
+  // early-return + 4x4 renderer). Stale minimized/visible during track
+  // switches caused deepSleep=true with playing=true and a static cover.
+  try {
+    if (typeof playing !== 'undefined' && playing
+      && typeof audio !== 'undefined' && audio && !audio.paused && audio.src) {
+      return false;
+    }
+  } catch (ePlayGuard) { }
   // Electron may briefly leave document.hidden stale after a tray restore.
   // The native BrowserWindow state is authoritative for desktop power policy;
   // browser-only builds still use the Page Visibility API.
@@ -144,6 +154,20 @@ function isHiddenForBackgroundOptimization() {
 }
 function isVisibleBackgroundMode() {
   return false;
+}
+
+function wakeRenderPowerForActivePlayback(reason) {
+  // Force clear stuck render-deep-sleep + restore renderer size after play starts.
+  try { updateRenderPowerClasses(); } catch (eCls) { }
+  try { applyRendererPowerMode(); } catch (ePow) { }
+  try {
+    if (typeof wakeMainLoopFromBackground === 'function') wakeMainLoopFromBackground();
+  } catch (eWake) { }
+  try {
+    if (typeof recoverVisualsAfterBackground === 'function') {
+      recoverVisualsAfterBackground(reason || 'playback-wake');
+    }
+  } catch (eRec) { }
 }
 function updateRenderPowerClasses() {
   document.body.classList.toggle('render-deep-sleep', isDeepBackgroundMode());
