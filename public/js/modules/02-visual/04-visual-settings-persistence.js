@@ -197,39 +197,10 @@ function readSavedLyricLayoutCriticalFallback(raw, err) {
   };
 }
 
-function applyImmersionDefaultsSoftMigrateV1(raw) {
-  raw = plainCurrentFxAutosavePayload(raw) || {};
-  if (raw.immersionDefaultsSoftMigrateV1 === true) return raw;
-  var patch = { immersionDefaultsSoftMigrateV1: true };
-  var pq = String(raw.performanceQuality == null ? '' : raw.performanceQuality).trim().toLowerCase();
-  // ONLY eco -> balanced (do not touch high/ultra/balanced/missing).
-  if (pq === 'eco') patch.performanceQuality = 'balanced';
-  // ONLY explicit false -> true (missing uses fxDefaults via normalize below).
-  if (raw.bloom === false) patch.bloom = true;
-  raw = Object.assign({}, raw, patch);
-  try {
-    var base = plainCurrentFxAutosavePayload(readCurrentFxAutosaveStorageRaw()) || {};
-    // Only persist when an existing autosave is present - never invent a sparse wipe file.
-    if (base && Object.keys(base).length) {
-      var payload = Object.assign({}, base, patch, {
-        currentAutosaveSchema: CURRENT_FX_AUTOSAVE_SCHEMA,
-        autosavedAt: Date.now(),
-        autosaveReason: 'immersionDefaultsSoftMigrateV1'
-      });
-      if (base.autosaveUser === true) payload.autosaveUser = true;
-      writeCurrentFxAutosavePayload(payload, { syncDisk: true, force: true });
-    }
-  } catch (e) {
-    console.warn('[FxAutosave] immersionDefaultsSoftMigrateV1 persist failed:', e);
-  }
-  return raw;
-}
-
 function readSavedLyricLayout() {
   var raw = null;
   try {
     raw = readCurrentFxAutosaveRaw();
-    raw = applyImmersionDefaultsSoftMigrateV1(raw);
     var savedPreset = clampRange(Number(raw.preset) || 0, 0, MAX_VISUAL_PRESET_INDEX);
     if (savedPreset === 3 && raw.visualPresetSchema !== VISUAL_PRESET_SCHEMA) {
       savedPreset = 5;
@@ -319,7 +290,7 @@ function readSavedLyricLayout() {
       lyricPauseHold: raw.lyricPauseHold !== false,
       floatLayer: raw.floatLayer === true,
       cinema: raw.cinema !== false,
-      bloom: raw.bloom == null ? !!fxDefaults.bloom : raw.bloom === true,
+      bloom: raw.bloom === true,
       edge: raw.edge === true,
       aiDepth: raw.aiDepth === true,
       particleLyrics: raw.particleLyrics !== false,
@@ -360,7 +331,6 @@ function readSavedLyricLayout() {
       desktopLyricsFps: desktopLyricsSchemaReady ? normalizeDesktopLyricsFps(raw.desktopLyricsFps) : fxDefaults.desktopLyricsFps,
       performanceBackground: normalizePerformanceBackgroundMode(raw.performanceBackground, raw.liveBackgroundKeep === true),
       performanceQuality: normalizePerformanceQuality(raw.performanceQuality),
-      immersionDefaultsSoftMigrateV1: raw.immersionDefaultsSoftMigrateV1 === true,
       foregroundFpsMode: normalizeForegroundFpsMode(raw.foregroundFpsMode === 'adaptive' ? 'vsync' : raw.foregroundFpsMode),
       memoryAutoTrimApp: raw.memoryAutoTrimApp !== false,
       memoryAutoTrimOnBackground: raw.memoryAutoTrimOnBackground !== false,
@@ -847,7 +817,6 @@ function saveLyricLayout(opts) {
       desktopLyricsFps: normalizeDesktopLyricsFps(fx.desktopLyricsFps),
       performanceBackground: normalizePerformanceBackgroundMode(fx.performanceBackground, fx.liveBackgroundKeep === true),
       performanceQuality: normalizePerformanceQuality(fx.performanceQuality),
-      immersionDefaultsSoftMigrateV1: fx.immersionDefaultsSoftMigrateV1 === true,
       foregroundFpsMode: normalizeForegroundFpsMode(fx.foregroundFpsMode),
       memoryAutoTrimApp: fx.memoryAutoTrimApp !== false,
       memoryAutoTrimOnBackground: fx.memoryAutoTrimOnBackground !== false,
