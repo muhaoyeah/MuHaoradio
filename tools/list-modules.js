@@ -1,6 +1,6 @@
 ﻿const fs = require('fs');
 const path = require('path');
-const root = 'C:/Users/MUHAO/Desktop/新建文件夹/muhaoradio';
+const root = path.resolve(__dirname, '..');
 const modRoot = path.join(root, 'public/js/modules');
 const dirs = fs.readdirSync(modRoot, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name).sort();
 for (const d of dirs) {

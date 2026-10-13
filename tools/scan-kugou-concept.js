@@ -1,5 +1,5 @@
 ﻿const fs=require('fs');const path=require('path');
-const root='C:/Users/MUHAO/Desktop/新建文件夹/muhaoradio';
+const root=path.resolve(__dirname, '..');
 function rg(dir, re, max=40){
   const out=[];
   (function walk(d){

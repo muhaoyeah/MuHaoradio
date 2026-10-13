@@ -17,11 +17,10 @@ const path = require('path');
 const vm = require('vm');
 
 const SCRIPT_DIR = __dirname;
-/* 目标定位顺序：脚本在 tools/ 下（__dirname/..）→ 环境变量 → 已知路径 */
+/* 目标定位顺序：脚本在 tools/ 下（__dirname/..）→ 环境变量 → 运行目录 */
 const CANDIDATES = [
   path.resolve(SCRIPT_DIR, '..'),
   process.env.MUHAORADIO_ROOT,
-  'C:\\Users\\MUHAO\\Desktop\\新建文件夹\\muhaoradio',
   'D:\\MuHaoradio\\resources\\app'
 ].filter(Boolean);
 const ROOT = CANDIDATES.find(p => fs.existsSync(path.join(p, 'server.js')) && fs.existsSync(path.join(p, 'public', 'js', 'index-loader.js')));

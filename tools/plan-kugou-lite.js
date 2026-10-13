@@ -1,5 +1,5 @@
 ﻿const fs=require('fs');const path=require('path');
-const root='C:/Users/MUHAO/Desktop/新建文件夹/muhaoradio';
+const root=path.resolve(__dirname, '..');
 function head(file, re, n=12){
   const t=fs.readFileSync(path.join(root,file),'utf8');
   const lines=t.split(/\n/);

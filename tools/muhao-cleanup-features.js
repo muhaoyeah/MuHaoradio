@@ -1,6 +1,6 @@
 ﻿const fs = require('fs');
 const path = require('path');
-const root = 'C:/Users/MUHAO/Desktop/新建文件夹/muhaoradio';
+const root = path.resolve(__dirname, '..');
 const inst = 'D:/MuHaoradio/resources/app';
 
 // Clean source splash already good; re-copy to install (source has no TRACE)
